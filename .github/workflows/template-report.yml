@@ -57,7 +57,7 @@ jobs:
             git checkout -b reports
           fi
           # Copy latest file from working tree (already moved to reports/history/...)
-          git add reports//*.md || true
+          git add reports/ || true
           git commit -m "[skip ci] chore(report): update template usage report" || echo "No changes to commit"
           git push origin reports
 
@@ -66,14 +66,22 @@ jobs:
         with:
           name: template-usage-report
           path: reports/history/*.md
+          if-no-files-found: warn
 
       - name: Add report to job summary
         if: always()
         shell: bash
+        env:
+          ORGS: bcgov-c bcgov
+          TEMPLATE_FULL_NAME: bcgov-c/ministry-gitops-jag-template
         run: |
           echo "## Template usage report" >> "$GITHUB_STEP_SUMMARY"
           echo "Template: ${TEMPLATE_FULL_NAME:-<unset>}" >> "$GITHUB_STEP_SUMMARY"
           echo "Orgs: ${ORGS}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          LATEST=$(ls -t reports/history/*.md 2>/dev/null | head -n1)
-          [ -n "$LATEST" ] && cat "$LATEST" >> "$GITHUB_STEP_SUMMARY" || echo "No report found"
+          LATEST=$(ls -t reports/history/*.md 2>/dev/null | head -n1 || true)
+          if [ -n "$LATEST" ]; then
+            cat "$LATEST" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No report found" >> "$GITHUB_STEP_SUMMARY"
+          fi
