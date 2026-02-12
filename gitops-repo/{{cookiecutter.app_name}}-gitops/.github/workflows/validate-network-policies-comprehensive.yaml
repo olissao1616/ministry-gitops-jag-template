@@ -285,7 +285,7 @@ jobs:
       - name: Run Pluto scan
         run: |
           set -euo pipefail
-          pluto detect -f rendered-${{ matrix.env }}.yaml --target-versions k8s=v1.28.0
+          pluto detect rendered-${{ matrix.env }}.yaml --target-versions k8s=v1.28.0
 
   trivy:
     name: Trivy (${{ matrix.env }})
