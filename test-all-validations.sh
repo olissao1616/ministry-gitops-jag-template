@@ -90,8 +90,9 @@ cookiecutter_run charts/ --no-input charts_dir=test-charts --output-dir "${TEST_
 cookiecutter_run deploy/ --no-input deploy_dir=test-deploy --output-dir "${TEST_DIR}" --overwrite-if-exists
 cookiecutter_run application/ --no-input application_dir=test-applications --output-dir "${TEST_DIR}" --overwrite-if-exists
 
-echo "[3/14] Copying shared-lib dependency..."
-cp -r "${BASE_DIR}/shared-lib" "${TEST_DIR}/"
+echo "[3/14] Skipping shared-lib copy (now using OCI registry: ghcr.io/olissao1616/helm)..."
+# No longer needed - ag-helm-templates is pulled from GHCR automatically
+# cp -r "${BASE_DIR}/shared-lib" "${TEST_DIR}/"
 
 echo "[3b/14] Copying GitHub workflows into generated chart repo..."
 if [ -d "${BASE_DIR}/.github/workflows" ]; then
