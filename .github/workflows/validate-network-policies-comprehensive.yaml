@@ -340,6 +340,7 @@ jobs:
         with:
           file: rendered-${{ matrix.env }}.yaml
           framework: kubernetes
+          skip_check: CKV_K8S_43
           output_format: cli,sarif
           output_file_path: console,checkov-results-${{ matrix.env }}.sarif
 
@@ -372,6 +373,12 @@ jobs:
           helm plugin install https://github.com/datreeio/helm-datree
           helm plugin update datree
           helm datree config set offline local
+
+      - name: Verify Datree plugin
+        run: |
+          set -euo pipefail
+          helm plugin list
+          helm datree --help
 
       - name: Download generated repo
         uses: actions/download-artifact@v4

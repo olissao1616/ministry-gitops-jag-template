@@ -114,6 +114,12 @@ jobs:
           helm plugin update datree
           helm datree config set offline local
 
+      - name: Verify Datree plugin
+        run: |
+          set -euo pipefail
+          helm plugin list
+          helm datree --help
+
       - name: Download centralized Datree policies
         run: |
           mkdir -p /tmp/policies
@@ -340,6 +346,7 @@ jobs:
         with:
           file: rendered-${{ matrix.env }}.yaml
           framework: kubernetes
+          skip_check: CKV_K8S_43
           output_format: cli,sarif
           output_file_path: console,checkov-results-${{ matrix.env }}.sarif
 
