@@ -2,6 +2,14 @@
 
 A cookiecutter template for creating standardized GitOps repositories for BC Government Justice applications deployed on OpenShift/Kubernetes.
 
+## 🎉 New: Helm Chart Published to GHCR!
+
+The `ag-helm-templates` shared library is now published to GitHub Container Registry. **No need to copy `shared-lib` folders anymore!**
+
+📦 **Package:** `oci://ghcr.io/olissao1616/helm/ag-helm-templates:1.0.3`
+
+See [HELM_PACKAGE_GUIDE.md](HELM_PACKAGE_GUIDE.md) for details.
+
 ## Quick Start
 
 **One command to test everything:**
@@ -82,13 +90,11 @@ backend:
 ### Deploy
 
 ```bash
-# Setup dependencies
-mkdir -p /tmp/shared-lib
-cp -r shared-lib/ag-helm /tmp/shared-lib/
-
-# Deploy to dev
+# The ag-helm dependency is now fetched from GHCR automatically!
 cd myapp-charts/gitops
 helm dependency update
+
+# Deploy to dev
 helm install myapp . \
   --values ../../myapp-deploy/dev_values.yaml \
   --namespace abc123-dev \
@@ -97,6 +103,8 @@ helm install myapp . \
 # Verify
 kubectl get pods -n abc123-dev
 ```
+
+**Note:** No need to manually copy `shared-lib/ag-helm` anymore! The cookiecutter template is configured to pull from `oci://ghcr.io/olissao1616/helm/ag-helm-templates` automatically.
 
 ## Key Features
 
