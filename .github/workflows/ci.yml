@@ -31,7 +31,7 @@ jobs:
       - name: Lint library chart
         run: |
           helm lint ./shared-lib/ag-helm
-      
+
       - name: Helm login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
 
