@@ -67,6 +67,23 @@ jobs:
           APP_NAME: ${{ github.event.client_payload.app_name || github.event.inputs.LicensePlate }}
           LICENCE_PLATE: ${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}
 
+      - name: Collect generated workflows (artifact)
+        shell: bash
+        run: |
+          rm -rf ./generated-workflows
+          mkdir -p ./generated-workflows
+          # Cookiecutter output contains a single folder under cookiecutter-temp/
+          # Copy ONLY the generated workflows for manual review/apply.
+          cp -R ./cookiecutter-temp/*/.github/workflows/. ./generated-workflows/ 2>/dev/null || true
+          ls -la ./generated-workflows || true
+
+      - name: Upload generated workflows (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: cookiecutter-workflows
+          path: generated-workflows
+          if-no-files-found: warn
+
    
       - name: Prepare root directory
         shell: bash
@@ -87,7 +104,9 @@ jobs:
         # files into the root directory so we can reinitialize git in the next step
         run: |
           shopt -s dotglob
-          rsync -r ./cookiecutter-temp/*/ . && \
+          # GitHub blocks the default Actions token from pushing commits that add/update/delete
+          # files under .github/workflows, so never copy generated workflows into place.
+          rsync -r --exclude '.github/workflows/**' ./cookiecutter-temp/*/ . && \
           rm -rf ./cookiecutter-temp/
           shopt -u dotglob
 
@@ -109,8 +128,8 @@ jobs:
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
 
-          rm -rf .github/workflows/setup-repository.yml
-          rm -rf .github/workflows/repository-setup.yml
+          # Safety: ensure workflows are unchanged before committing.
+          git restore .github/workflows 2>/dev/null || true
 
           git add .
           git commit -m "Automated commit: Create Cookiecutter template"
@@ -172,3 +191,4 @@ jobs:
   #   uses: bcgov-c/ministry-gitops-jag/.github/workflows/default-rbac.yml@template
   #   with:
   #     licence_plate: ${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}
+
