@@ -1,0 +1,52 @@
+{% raw %}{{/* PostgreSQL NetworkPolicy (guarded) */}}
+{{- if .Values.postgresql.enabled }}
+{{- $appGroup := .Values.project | default "app" -}}
+{{- $pgInstance := default (printf "%s-postgresql" .Release.Name) .Values.postgresql.fullnameOverride -}}
+{{- $backendName := .Values.backend.image.name | default "backend" -}}
+
+{{- $networkPolicy := dict "Values" .Values -}}
+{{- $_ := set $networkPolicy "ApplicationGroup" $appGroup -}}
+{{- $_ := set $networkPolicy "Name" "postgresql" -}}
+{{- $_ := set $networkPolicy "Namespace" $.Release.Namespace -}}
+{{- $_ := set $networkPolicy "LabelData" "postgresql.policy.labels" -}}
+{{- $_ := set $networkPolicy "PodSelector" (dict "matchLabels" (dict
+  "app.kubernetes.io/instance" $pgInstance
+  "app.kubernetes.io/name" "postgresql"
+  "app.kubernetes.io/component" "primary"
+)) -}}
+{{- $_ := set $networkPolicy "PolicyTypes" (list "Ingress" "Egress") -}}
+
+{{- $_ := set $networkPolicy "AllowIngressFrom" (dict
+  "namespaces" (list
+    (dict "podSelector" (dict "matchLabels" (dict
+      "app.kubernetes.io/name" $backendName
+      "app.kubernetes.io/part-of" $appGroup
+    )) "ports" (list 5432))
+    (dict "podSelector" (dict "matchLabels" (dict
+      "app.kubernetes.io/component" "pg_dumpall"
+      "job" "postgres-job"
+    )) "ports" (list 5432))
+  )
+) -}}
+
+{{- $_ := set $networkPolicy "AllowEgressTo" (dict
+) -}}
+
+{{ include "ag-template.networkpolicy" $networkPolicy }}
+{{- end }}
+
+{{/* Helper fragments used by ag-template.networkpolicy */}}
+
+{{- define "postgresql.policy.labels" -}}
+{{- if .Values.environment }}
+environment: {{ .Values.environment }}
+env: {{ default .Values.environment .Values.env }}
+{{- end }}
+{{- if .Values.owner }}
+owner: {{ .Values.owner }}
+{{- end }}
+{{- if .Values.project }}
+project: {{ .Values.project }}
+{{- end }}
+{{- end }}
+{% endraw %}

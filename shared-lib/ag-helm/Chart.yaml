@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ag-helm-templates
+description: Reusable Helm library templates for common Kubernetes resources for AG
+type: library
+version: 1.0.3
+appVersion: "1.0.0"

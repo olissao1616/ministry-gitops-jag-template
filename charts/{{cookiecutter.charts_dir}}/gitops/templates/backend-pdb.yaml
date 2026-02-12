@@ -1,0 +1,10 @@
+{% raw %}{{- if and .Values.backend .Values.backend.enabled (not (default false .Values.backend.skip)) }}
+{{- $pdbConfig := dict "Values" .Values -}}
+{{- $_ := set $pdbConfig "Namespace" $.Release.Namespace -}}
+{{- $_ := set $pdbConfig "ApplicationGroup" (default "app" .Values.project) -}}
+{{- $_ := set $pdbConfig "Name" (default "backend" .Values.backend.image.name) -}}
+{{- $_ := set $pdbConfig "ModuleValues" .Values.backend -}}
+{{- $_ := set $pdbConfig "LabelData" "backend.pod.labels" -}}
+{{ include "ag-template.pdb" $pdbConfig }}
+{{- end }}
+{% endraw %}

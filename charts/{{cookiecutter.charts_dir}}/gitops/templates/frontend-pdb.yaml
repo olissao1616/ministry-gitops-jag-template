@@ -1,0 +1,10 @@
+{% raw %}{{- if and .Values.frontend .Values.frontend.enabled (not (default false .Values.frontend.skip)) }}
+{{- $pdbConfig := dict "Values" .Values -}}
+{{- $_ := set $pdbConfig "Namespace" $.Release.Namespace -}}
+{{- $_ := set $pdbConfig "ApplicationGroup" (default "app" .Values.project) -}}
+{{- $_ := set $pdbConfig "Name" (default "frontend" .Values.frontend.image.name) -}}
+{{- $_ := set $pdbConfig "ModuleValues" .Values.frontend -}}
+{{- $_ := set $pdbConfig "LabelData" "frontend.pod.labels" -}}
+{{ include "ag-template.pdb" $pdbConfig }}
+{{- end }}
+{% endraw %}

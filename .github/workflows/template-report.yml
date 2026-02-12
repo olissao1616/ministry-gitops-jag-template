@@ -1,0 +1,79 @@
+name: Template Usage Report
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate report
+        id: gen
+        env:
+          # Space-separated list of orgs to scan
+          ORGS: bcgov-c bcgov
+          # Provide this as a repository variable like: owner/template-repo
+          TEMPLATE_FULL_NAME: bcgov-c/ministry-gitops-jag-template
+          GH_TOKEN: ${{ secrets.GHCR_PAT }}
+          OUTPUT_FILE: reports/template-usage-report.md
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          node scripts/template-report.mjs "$OUTPUT_FILE"
+          # Timestamp and stage a unique filename
+          DATE=$(date -u +%Y-%m-%dT%H-%M-%SZ)
+          DEST="reports/history/template-usage-${DATE}.md"
+          mkdir -p "$(dirname "$DEST")"
+          mv "$OUTPUT_FILE" "$DEST"
+          echo "file=$DEST" >> "$GITHUB_OUTPUT"
+
+      - name: Persist report to 'reports' branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Ensure we can push a reports branch
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git fetch --no-tags --prune --depth=1 origin +refs/heads/reports:refs/remotes/origin/reports || true
+          if git show-ref --verify --quiet refs/heads/reports; then
+            git checkout reports
+            git merge --ff-only "${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}" || true
+          elif git show-ref --verify --quiet refs/remotes/origin/reports; then
+            git checkout -b reports origin/reports
+          else
+            git checkout -b reports
+          fi
+          # Copy latest file from working tree (already moved to reports/history/...)
+          git add reports//*.md || true
+          git commit -m "[skip ci] chore(report): update template usage report" || echo "No changes to commit"
+          git push origin reports
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: template-usage-report
+          path: reports/history/*.md
+
+      - name: Add report to job summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## Template usage report" >> "$GITHUB_STEP_SUMMARY"
+          echo "Template: ${TEMPLATE_FULL_NAME:-<unset>}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Orgs: ${ORGS}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          LATEST=$(ls -t reports/history/*.md 2>/dev/null | head -n1)
+          [ -n "$LATEST" ] && cat "$LATEST" >> "$GITHUB_STEP_SUMMARY" || echo "No report found"

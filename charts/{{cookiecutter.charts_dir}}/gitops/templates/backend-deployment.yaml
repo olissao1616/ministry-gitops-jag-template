@@ -1,0 +1,128 @@
+{% raw %}{{/* Backend Deployment (guarded) */}}
+{{- if and .Values.backend .Values.backend.enabled (not (default false .Values.backend.skip)) }}
+{{- $appGroup := (default "app" .Values.project) -}}
+{{- $name := (default "backend" .Values.backend.image.name) -}}
+{{- $resName := (printf "%s-%s" $appGroup $name | trunc 63 | trimSuffix "-") -}}
+
+{{- $deploymentConfig := dict "Values" .Values -}}
+{{- $_ := set $deploymentConfig "Namespace" $.Release.Namespace -}}
+{{- $_ := set $deploymentConfig "ApplicationGroup" $appGroup -}}
+{{- $_ := set $deploymentConfig "Name" $name -}}
+{{- $_ := set $deploymentConfig "Registry" .Values.backend.image.repository -}}
+{{- $_ := set $deploymentConfig "ModuleValues" .Values.backend -}}
+{{- if (default false .Values.backend.serviceAccount.create) -}}
+{{- $_ := set $deploymentConfig "ServiceAccountName" $resName -}}
+{{- end -}}
+{{- $_ := set $deploymentConfig "Ports" "backend.ports" -}}
+{{- $_ := set $deploymentConfig "Env" "backend.env" -}}
+{{- $_ := set $deploymentConfig "Probes" "backend.probes" -}}
+{{- $_ := set $deploymentConfig "Volumes" "backend.volumes" -}}
+{{- $_ := set $deploymentConfig "VolumeMounts" "backend.volumeMounts" -}}
+{{- $_ := set $deploymentConfig "LabelData" "backend.pod.labels" -}}
+{{- $_ := set $deploymentConfig "AnnotationData" "backend.annotations" -}}
+{{- $_ := set $deploymentConfig "SecurityContext" "backend.securityContext" -}}
+
+{{ include "ag-template.deployment" $deploymentConfig }}
+{{- end }}
+
+{{/* Helper fragments used by ag-template.deployment */}}
+
+{{- define "backend.ports" }}
+- name: http
+  containerPort: {{ dig "service" "port" 8080 .ModuleValues }}
+  protocol: TCP
+{{- end }}
+
+{{- define "backend.env" }}
+{{- $db := (or .ModuleValues.database .Values.database) -}}
+{{- if $db }}
+{{- if $db.existingSecret }}
+- name: ConnectionStrings__Database
+  valueFrom:
+    secretKeyRef:
+      name: {{ $db.existingSecret | quote }}
+      key: {{ default "connectionString" $db.existingSecretKey | quote }}
+{{- else if $db.connectionString }}
+- name: ConnectionStrings__Database
+  value: {{ $db.connectionString | quote }}
+{{- end }}
+{{- end }}
+{{- $kc := (or .ModuleValues.keycloak .Values.keycloak) -}}
+{{- if $kc }}
+- name: Keycloak__RealmUrl
+  value: {{ $kc.realmUrl }}
+- name: Keycloak__AdministrationClientId
+  value: {{ $kc.adminClientId }}
+- name: Keycloak__ClientId
+  value: {{ $kc.ClientId }}
+{{- end }}
+{{- with (or .ModuleValues.extraEnv .Values.extraEnv) }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end }}
+
+{{- define "backend.probes" }}
+livenessProbe:
+  httpGet:
+    path: /api/healthz
+    port: http
+  initialDelaySeconds: 15
+  timeoutSeconds: 5
+  periodSeconds: 10
+readinessProbe:
+  httpGet:
+    path: /api/readyz
+    port: http
+  initialDelaySeconds: 15
+  timeoutSeconds: 5
+  periodSeconds: 10
+{{- end }}
+
+{{- define "backend.volumes" }}
+{{- with .ModuleValues.volumes }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end }}
+
+{{- define "backend.volumeMounts" }}
+{{- with .ModuleValues.volumeMounts }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end }}
+
+{{- define "backend.securityContext" }}
+{{- with .ModuleValues.containerSecurityContext }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end }}
+
+{{- define "backend.pod.labels" }}
+{{- $root := .Values -}}
+{{- $mv := .ModuleValues -}}
+{{- with $mv.podLabels }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- if $root.environment }}
+environment: {{ $root.environment }}
+env: {{ $root.env | default $root.environment }}
+{{- end }}
+{{- if $root.owner }}
+owner: {{ $root.owner }}
+{{- end }}
+{{- if $root.project }}
+project: {{ $root.project }}
+{{- end }}
+{{- end }}
+
+{{- define "backend.annotations" }}
+{{- with .ModuleValues.podAnnotations }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- with .Values.commonAnnotations }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- if and .ModuleValues.database .ModuleValues.database.existingSecret }}
+checkov.io/skip1: CKV_K8S_35=Connection string is injected from a Kubernetes Secret; application expects env var configuration.
+{{- end }}
+{{- end }}
+{% endraw %}

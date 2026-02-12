@@ -1,0 +1,28 @@
+# Helm
+charts/*/charts/
+*.tgz
+.helmignore
+
+# Cookiecutter
+*.pyc
+__pycache__/
+
+# Test output
+test-output/
+dist/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.log
+tmp/
+temp/

@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{cookiecutter.app_name}}-dev
+spec:
+  destination:
+    name: ''
+    namespace: {{cookiecutter.licence_plate}}-dev
+    server: 'https://kubernetes.default.svc'
+  source:
+    path: charts/gitops
+    repoURL: 'git@github.com:bcgov-c/tenant-gitops-{{cookiecutter.licence_plate}}.git'
+    targetRevision: develop
+    helm:
+      valueFiles:
+        - $values/deploy/dev_values.yaml
+  project: {{cookiecutter.licence_plate}}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

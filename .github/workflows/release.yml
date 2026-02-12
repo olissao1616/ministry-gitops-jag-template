@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      CHART_DIR: ./shared-lib/ag-helm
+      CHART_NAME: ag-helm-templates
+    outputs:
+      version: ${{ steps.sync.outputs.version }}
+      tag: ${{ steps.sync.outputs.tag }}
+      default_branch: ${{ steps.sync.outputs.default_branch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare release (sync Chart.yaml to tag version)
+        id: sync
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE="${CHART_DIR}/Chart.yaml"
+          # Determine default branch
+          DEFAULT_BRANCH=$(git remote show origin | sed -n '/HEAD branch/s/.*: //p')
+          if [ -z "${DEFAULT_BRANCH}" ]; then
+            if git show-ref --verify --quiet refs/heads/main; then DEFAULT_BRANCH=main; else DEFAULT_BRANCH=master; fi
+          fi
+          echo "default_branch=${DEFAULT_BRANCH}" >> "$GITHUB_OUTPUT"
+
+          # Extract version from tag like v0.2.1
+          TAG_REF="${GITHUB_REF_NAME}"
+          if ! echo "$TAG_REF" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Tag '$TAG_REF' does not match pattern vX.Y.Z" >&2
+            exit 1
+          fi
+          VER="${TAG_REF#v}"
+          echo "Tag=$TAG_REF -> version=$VER"
+
+          git checkout "$DEFAULT_BRANCH"
+          git pull --ff-only
+          CURRENT_VER=$(grep -E '^version:' "$FILE" | awk '{print $2}')
+          if [ "$CURRENT_VER" != "$VER" ]; then
+            echo "Syncing Chart.yaml: $CURRENT_VER -> $VER"
+            sed -i -E "s/^version: .*/version: ${VER}/" "$FILE"
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add "$FILE"
+            git commit -m "[skip ci] chore(release): sync ${CHART_NAME} version to ${VER} (from tag ${TAG_REF})" || echo "No changes to commit"
+            git push origin "$DEFAULT_BRANCH"
+          else
+            echo "Chart.yaml already matches tag version ${VER} on ${DEFAULT_BRANCH}"
+          fi
+
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG_REF}" >> "$GITHUB_OUTPUT"
+
+  package-and-publish-oci:
+    runs-on: ubuntu-latest
+    needs: prepare-release
+    permissions:
+      contents: read
+      packages: write
+    env:
+      CHART_DIR: ./shared-lib/ag-helm
+      CHART_NAME: ag-helm-templates
+      OCI_REGISTRY: ghcr.io/olissao1616/helm
+      TAG: ${{ needs.prepare-release.outputs.tag }}
+      VERSION: ${{ needs.prepare-release.outputs.version }}
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.prepare-release.outputs.default_branch }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package chart
+        run: |
+          mkdir -p dist
+          helm lint ${CHART_DIR}
+          helm package ${CHART_DIR} -d dist
+          ls -l dist
+
+      - name: Push to OCI
+        run: |
+          FILE=$(ls dist/${CHART_NAME}-*.tgz | head -n1)
+          echo "Pushing $FILE to oci://${OCI_REGISTRY}"
+          helm push "$FILE" oci://${OCI_REGISTRY}

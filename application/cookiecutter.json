@@ -1,0 +1,17 @@
+{
+    "repo_name": "reponame",
+    "app_name": "myapp",
+    "licence_plate" : "abcd",
+    "team_name" : "abcd",
+    "project_name": "abcd",
+    "workflow_dir": ".github",
+    "application_dir": "applications",
+    "charts_dir": "charts",
+    "deploy_dir": "deploy",
+    "chart_name": "{{ cookiecutter.app_name }}-charts",
+    "description": "Helm chart for {{ cookiecutter.app_name }} with NGINX, PostgreSQL, and ASP.NET Core API",
+    "nginx_version": "15.11.0",
+    "postgresql_version": "14.1.1",
+    "aspnetcore_version": "5.5.0",
+	"argocd": "argocd"
+}

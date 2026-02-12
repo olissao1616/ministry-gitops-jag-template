@@ -1,0 +1,10 @@
+{% raw %}{{- if and .Values.frontend .Values.frontend.enabled (not (default false .Values.frontend.skip)) .Values.frontend.autoscaling.enabled }}
+{{- $hpaConfig := dict "Values" .Values -}}
+{{- $_ := set $hpaConfig "Namespace" $.Release.Namespace -}}
+{{- $_ := set $hpaConfig "ApplicationGroup" (default "app" .Values.project) -}}
+{{- $_ := set $hpaConfig "Name" (default "frontend" .Values.frontend.image.name) -}}
+{{- $_ := set $hpaConfig "ModuleValues" .Values.frontend -}}
+{{- $_ := set $hpaConfig "LabelData" "frontend.pod.labels" -}}
+{{ include "ag-template.hpa" $hpaConfig }}
+{{- end }}
+{% endraw %}

@@ -1,0 +1,21 @@
+{% raw %}{{/* Backend Service (guarded) */}}
+{{- if and .Values.backend .Values.backend.enabled (not (default false .Values.backend.skip)) }}
+{{- $serviceConfig := dict "Values" .Values -}}
+{{- $_ := set $serviceConfig "Namespace" $.Release.Namespace -}}
+{{- $_ := set $serviceConfig "ApplicationGroup" (default "app" .Values.project) -}}
+{{- $_ := set $serviceConfig "Name" (default "backend" .Values.backend.image.name) -}}
+{{- $_ := set $serviceConfig "ModuleValues" .Values.backend -}}
+{{- $_ := set $serviceConfig "ServicePorts" "backend.service.ports" -}}
+{{- $_ := set $serviceConfig "LabelData" "backend.pod.labels" -}}
+{{ include "ag-template.service" $serviceConfig }}
+{{- end }}
+
+{{/* Helper fragments used by ag-template.service */}}
+
+{{- define "backend.service.ports" }}
+- name: http
+  port: {{ dig "service" "port" 8080 .ModuleValues }}
+  targetPort: http
+  protocol: TCP
+{{- end }}
+{% endraw %}

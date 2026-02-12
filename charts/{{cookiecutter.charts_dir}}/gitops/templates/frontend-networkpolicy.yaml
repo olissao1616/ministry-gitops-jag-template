@@ -1,0 +1,20 @@
+{% raw %}{{/* Frontend NetworkPolicy (guarded) */}}
+{{- if and .Values.frontend .Values.frontend.enabled (not (default false .Values.frontend.skip)) }}
+{{- $frontendName := .Values.frontend.image.name | default "frontend" -}}
+{{- $backendName := .Values.backend.image.name | default "backend" -}}
+{{- $frontendPort := .Values.frontend.service.port | default 8000 -}}
+
+{{- $networkPolicy := dict "Values" .Values -}}
+{{- $_ := set $networkPolicy "ModuleValues" .Values.frontend -}}
+{{- $_ := set $networkPolicy "ApplicationGroup" (.Values.project | default "app") -}}
+{{- $_ := set $networkPolicy "Name" $frontendName -}}
+{{- $_ := set $networkPolicy "Namespace" .Release.Namespace -}}
+{{- $_ := set $networkPolicy "LabelData" "frontend.pod.labels" -}}
+
+{{- $_ := set $networkPolicy "AllowEgressTo" (dict
+  "apps" (list (dict "name" $backendName "ports" (list 8080)))
+) -}}
+
+{{ include "ag-template.networkpolicy" $networkPolicy }}
+{{- end }}
+{% endraw %}

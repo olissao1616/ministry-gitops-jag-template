@@ -1,0 +1,120 @@
+{% raw %}{{/* Frontend Deployment (guarded) */}}
+{{- if and .Values.frontend .Values.frontend.enabled (not (default false .Values.frontend.skip)) }}
+{{- $appGroup := (default "app" .Values.project) -}}
+{{- $name := (default "frontend" .Values.frontend.image.name) -}}
+{{- $resName := (printf "%s-%s" $appGroup $name | trunc 63 | trimSuffix "-") -}}
+
+{{- $deploymentConfig := dict "Values" .Values -}}
+{{- $_ := set $deploymentConfig "Namespace" $.Release.Namespace -}}
+{{- $_ := set $deploymentConfig "ApplicationGroup" $appGroup -}}
+{{- $_ := set $deploymentConfig "Name" $name -}}
+{{- $_ := set $deploymentConfig "Registry" .Values.frontend.image.repository -}}
+{{- $_ := set $deploymentConfig "ModuleValues" .Values.frontend -}}
+{{- if (default false .Values.frontend.serviceAccount.create) -}}
+{{- $_ := set $deploymentConfig "ServiceAccountName" $resName -}}
+{{- end -}}
+{{- $_ := set $deploymentConfig "Ports" "frontend.ports" -}}
+{{- $_ := set $deploymentConfig "Env" "frontend.env" -}}
+{{- $_ := set $deploymentConfig "Probes" "frontend.probes" -}}
+{{- $_ := set $deploymentConfig "Volumes" "frontend.volumes" -}}
+{{- $_ := set $deploymentConfig "VolumeMounts" "frontend.volumeMounts" -}}
+{{- $_ := set $deploymentConfig "LabelData" "frontend.pod.labels" -}}
+{{- $_ := set $deploymentConfig "AnnotationData" "frontend.annotations" -}}
+{{- $_ := set $deploymentConfig "SecurityContext" "frontend.securityContext" -}}
+
+{{ include "ag-template.deployment" $deploymentConfig }}
+{{- end }}
+
+{{/* Helper fragments used by ag-template.deployment */}}
+
+{{- define "frontend.ports" }}
+- name: http
+  containerPort: {{ dig "service" "port" 8000 .ModuleValues }}
+  protocol: TCP
+{{- end }}
+
+{{- define "frontend.env" }}
+{{- if and .Values.keycloak .Values.keycloak.enabled }}
+- name: VITE_DIAM_AUTH_URL
+  value: {{ .Values.keycloak.authUrl }}
+- name: VITE_DIAM_AUTH_REALM
+  value: {{ .Values.keycloak.realm }}
+- name: VITE_DIAM_AUTH_CLIENT_ID
+  value: {{ .Values.keycloak.clientId }}
+{{- end }}
+{{- if .ModuleValues.apiUrl }}
+- name: VITE_API_URL
+  value: {{ .ModuleValues.apiUrl }}
+{{- end }}
+{{- with .ModuleValues.extraEnv }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end }}
+
+{{- define "frontend.probes" }}
+{{- $port := (dig "service" "port" 8000 .ModuleValues) -}}
+livenessProbe:
+  httpGet:
+    path: /api/public/health
+    port: {{ $port }}
+  initialDelaySeconds: 15
+  timeoutSeconds: 25
+  periodSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+readinessProbe:
+  httpGet:
+    path: /api/public/ready
+    port: {{ $port }}
+  initialDelaySeconds: 15
+  timeoutSeconds: 25
+  periodSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+{{- end }}
+
+{{- define "frontend.volumes" }}
+{{- with .ModuleValues.volumes }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end }}
+
+{{- define "frontend.volumeMounts" }}
+{{- with .ModuleValues.volumeMounts }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end }}
+
+{{- define "frontend.securityContext" }}
+{{- with .ModuleValues.containerSecurityContext }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end }}
+
+{{- define "frontend.pod.labels" }}
+{{- $v := .Values -}}
+{{- $mv := default (dict) .ModuleValues -}}
+{{- with $mv.podLabels }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- if $v.environment }}
+environment: {{ $v.environment }}
+env: {{ $v.env | default $v.environment }}
+{{- end }}
+{{- if $v.owner }}
+owner: {{ $v.owner }}
+{{- end }}
+{{- if $v.project }}
+project: {{ $v.project }}
+{{- end }}
+{{- end }}
+
+{{- define "frontend.annotations" }}
+{{- with .ModuleValues.podAnnotations }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- with .Values.commonAnnotations }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end }}
+{% endraw %}

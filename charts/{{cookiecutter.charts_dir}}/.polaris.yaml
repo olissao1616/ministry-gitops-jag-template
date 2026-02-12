@@ -1,0 +1,118 @@
+# Polaris Configuration
+# Validates Kubernetes best practices
+
+checks:
+  # Security
+  hostIPCSet: danger
+  hostPIDSet: danger
+  hostNetworkSet: danger
+  privilegeEscalationAllowed: danger
+  runAsRootAllowed: danger
+  runAsPrivileged: danger
+  notReadOnlyRootFilesystem: danger
+  cpuRequestsMissing: danger
+  cpuLimitsMissing: danger
+  memoryRequestsMissing: danger
+  memoryLimitsMissing: danger
+
+  # Images
+  tagNotSpecified: danger
+  pullPolicyNotAlways: danger
+
+  # Health checks
+  readinessProbeMissing: danger
+  livenessProbeMissing: danger
+
+  # Networking
+  tlsSettingsMissing: danger
+
+  # Custom checks for this project
+  deploymentMissingReplicas: danger
+  priorityClassNotSet: danger
+  networkPolicyRequired: danger
+  dataClassLabelRequired: danger
+  routeAviAnnotationRequired: danger
+
+exemptions:
+  - namespace: kube-system
+  - namespace: kube-public
+  - controllerNames:
+      - kube-dns
+      - kube-proxy
+      - calico-node
+      - kindnet
+
+# Mutation webhooks
+mutations: []
+
+# Custom messages
+customChecks:
+  networkPolicyRequired:
+    successMessage: NetworkPolicy is defined
+    failureMessage: Deployment should have a NetworkPolicy
+    category: Security
+    target: Deployment
+    schema:
+      '$schema': http://json-schema.org/draft-07/schema
+      type: object
+      required:
+        - kind
+        - metadata
+      properties:
+        kind:
+          const: Deployment
+
+  dataClassLabelRequired:
+    successMessage: DataClass label is set
+    failureMessage: Pod must have DataClass label (Low/Medium/High)
+    category: Security
+    target: Deployment
+    schema:
+      '$schema': http://json-schema.org/draft-07/schema
+      type: object
+      required:
+        - spec
+      properties:
+        spec:
+          type: object
+          required:
+            - template
+          properties:
+            template:
+              type: object
+              required:
+                - metadata
+              properties:
+                metadata:
+                  type: object
+                  required:
+                    - labels
+                  properties:
+                    labels:
+                      type: object
+                      required:
+                        - DataClass
+
+  routeAviAnnotationRequired:
+    successMessage: AVI annotation is set
+    failureMessage: Route must have aviinfrasetting.ako.vmware.com/name annotation
+    category: Security
+    target: Route
+    schema:
+      '$schema': http://json-schema.org/draft-07/schema
+      type: object
+      required:
+        - kind
+        - metadata
+      properties:
+        kind:
+          const: Route
+        metadata:
+          type: object
+          required:
+            - annotations
+          properties:
+            annotations:
+              type: object
+              required:
+                - aviinfrasetting.ako.vmware.com/name

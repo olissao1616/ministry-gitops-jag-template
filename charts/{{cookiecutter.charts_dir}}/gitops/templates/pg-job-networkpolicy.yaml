@@ -1,0 +1,43 @@
+{% raw %}{{- $pgJob := default (dict) .Values.pgJob -}}
+{{- if (default false $pgJob.enabled) -}}
+
+{{- $appGroup := include "chart.fullname" . -}}
+
+{{- $networkPolicy := dict "ApplicationGroup" $appGroup "Name" "backup-egress" -}}
+{{- $_ := set $networkPolicy "Namespace" $.Release.Namespace -}}
+{{- $_ := set $networkPolicy "PolicyTypes" (list "Egress") -}}
+{{- $_ := set $networkPolicy "Labels" (dict
+  "app.kubernetes.io/component" "pg_dumpall"
+  "role" "backup"
+) -}}
+{{- $_ := set $networkPolicy "Values" .Values -}}
+{{- $_ := set $networkPolicy "LabelData" "pgjob.policy.labels" -}}
+{{- $_ := set $networkPolicy "PodSelector" (dict "matchLabels" (dict
+  "app.kubernetes.io/component" "pg_dumpall"
+  "job" "postgres-job"
+)) -}}
+
+{{- $_ := set $networkPolicy "ModuleValues" $pgJob -}}
+
+{{- $_ := set $networkPolicy "AllowEgressTo" (dict
+  "apps" (list (dict "name" "postgresql" "ports" (list 5432)))
+) -}}
+
+{{ include "ag-template.networkpolicy" $networkPolicy }}
+
+{{- end -}}
+
+{{- define "pgjob.policy.labels" -}}
+{{- if .Values.environment }}
+environment: {{ .Values.environment }}
+env: {{ default .Values.environment .Values.env }}
+{{- end }}
+{{- if .Values.owner }}
+owner: {{ .Values.owner }}
+{{- end }}
+{{- if .Values.project }}
+project: {{ .Values.project }}
+{{- end }}
+{{- end }}
+{% endraw %}
+

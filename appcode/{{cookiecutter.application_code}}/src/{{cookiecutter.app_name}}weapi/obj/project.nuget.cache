@@ -1,0 +1,45 @@
+{
+  "version": 2,
+  "dgSpecHash": "CjDGuMowF2s=",
+  "success": false,
+  "projectFilePath": "C:\\Users\\Stanley.Okeke\\ministry-gitops-jag-template-main (1)\\ministry-gitops-jag-template-main\\appcode\\{{cookiecutter.application_code}}\\src\\{{cookiecutter.app_name}}weapi\\{{cookiecutter.app_name}}webapi.csproj",
+  "expectedPackageFiles": [],
+  "logs": [
+    {
+      "code": "NU1301",
+      "level": "Error",
+      "message": "Failed to retrieve information about 'Flurl' from remote source 'https://gitlab.com/api/v4/projects/52670241/packages/nuget/download/flurl/index.json'.\r\n  An attempt was made to access a socket in a way forbidden by its access permissions. (gitlab.com:443)\r\n  An attempt was made to access a socket in a way forbidden by its access permissions.",
+      "libraryId": "Flurl"
+    },
+    {
+      "code": "NU1301",
+      "level": "Error",
+      "message": "Failed to retrieve information about 'Flurl' from remote source 'https://gitlab.com/api/v4/projects/52670241/packages/nuget/download/flurl/index.json'.\r\n  An attempt was made to access a socket in a way forbidden by its access permissions. (gitlab.com:443)\r\n  An attempt was made to access a socket in a way forbidden by its access permissions.",
+      "libraryId": "Flurl"
+    },
+    {
+      "code": "NU1301",
+      "level": "Error",
+      "message": "Failed to retrieve information about 'System.Text.Json' from remote source 'https://nuget.org/api/v2/curated-feeds/microsoftdotnet/FindPackagesById()?id='System.Text.Json'&semVerLevel=2.0.0'.\r\n  An attempt was made to access a socket in a way forbidden by its access permissions. (nuget.org:443)\r\n  An attempt was made to access a socket in a way forbidden by its access permissions.",
+      "libraryId": "System.Text.Json"
+    },
+    {
+      "code": "NU1301",
+      "level": "Error",
+      "message": "Failed to retrieve information about 'System.Threading.Tasks.Extensions' from remote source 'https://nuget.org/api/v2/curated-feeds/microsoftdotnet/FindPackagesById()?id='System.Threading.Tasks.Extensions'&semVerLevel=2.0.0'.\r\n  An attempt was made to access a socket in a way forbidden by its access permissions. (nuget.org:443)\r\n  An attempt was made to access a socket in a way forbidden by its access permissions.",
+      "libraryId": "System.Threading.Tasks.Extensions"
+    },
+    {
+      "code": "NU1301",
+      "level": "Error",
+      "message": "Failed to retrieve information about 'Serilog.Sinks.Async' from remote source 'https://gitlab.com/api/v4/projects/76940979/packages/nuget/download/serilog.sinks.async/index.json'.\r\n  An attempt was made to access a socket in a way forbidden by its access permissions. (gitlab.com:443)\r\n  An attempt was made to access a socket in a way forbidden by its access permissions.",
+      "libraryId": "Serilog.Sinks.Async"
+    },
+    {
+      "code": "NU1301",
+      "level": "Error",
+      "message": "Failed to retrieve information about 'Serilog.Sinks.Async' from remote source 'https://gitlab.com/api/v4/projects/76940979/packages/nuget/download/serilog.sinks.async/index.json'.\r\n  An attempt was made to access a socket in a way forbidden by its access permissions. (gitlab.com:443)\r\n  An attempt was made to access a socket in a way forbidden by its access permissions.",
+      "libraryId": "Serilog.Sinks.Async"
+    }
+  ]
+}

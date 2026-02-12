@@ -1,0 +1,242 @@
+{
+  "version": 3,
+  "targets": {
+    "net8.0": {}
+  },
+  "libraries": {},
+  "projectFileDependencyGroups": {
+    "net8.0": [
+      "DomainResult >= 3.2.0",
+      "FluentValidation >= 11.9.0",
+      "Flurl >= 4.0.0",
+      "IdentityModel >= 6.2.0",
+      "Keycloak.Net >= 1.0.18",
+      "Microsoft.AspNetCore.Authentication.JwtBearer >= 8.0.3",
+      "Microsoft.VisualStudio.Azure.Containers.Tools.Targets >= 1.19.6",
+      "NodaTime >= 3.1.11",
+      "Npgsql >= 8.0.2",
+      "Npgsql.EntityFrameworkCore.PostgreSQL >= 8.0.2",
+      "Npgsql.EntityFrameworkCore.PostgreSQL.Design >= 1.1.0",
+      "Npgsql.EntityFrameworkCore.PostgreSQL.NodaTime >= 8.0.2",
+      "Scrutor >= 4.2.2",
+      "SendGrid >= 9.29.2",
+      "Serilog >= 3.1.1",
+      "Serilog.AspNetCore >= 8.0.1",
+      "Serilog.Enrichers.Environment >= 2.3.0",
+      "Serilog.Extensions.Hosting >= 8.0.0",
+      "Serilog.Sinks.Async >= 1.5.0",
+      "Serilog.Sinks.Console >= 5.0.1",
+      "Serilog.Sinks.File >= 5.0.0",
+      "Swashbuckle.AspNetCore >= 6.4.0"
+    ]
+  },
+  "packageFolders": {
+    "C:\\Users\\Stanley.Okeke\\.nuget\\packages\\": {},
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "C:\\Users\\Stanley.Okeke\\ministry-gitops-jag-template-main (1)\\ministry-gitops-jag-template-main\\appcode\\{{cookiecutter.application_code}}\\src\\{{cookiecutter.app_name}}weapi\\{{cookiecutter.app_name}}webapi.csproj",
+      "projectName": "{{cookiecutter.app_name}}webapi",
+      "projectPath": "C:\\Users\\Stanley.Okeke\\ministry-gitops-jag-template-main (1)\\ministry-gitops-jag-template-main\\appcode\\{{cookiecutter.application_code}}\\src\\{{cookiecutter.app_name}}weapi\\{{cookiecutter.app_name}}webapi.csproj",
+      "packagesPath": "C:\\Users\\Stanley.Okeke\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\Stanley.Okeke\\ministry-gitops-jag-template-main (1)\\ministry-gitops-jag-template-main\\appcode\\{{cookiecutter.application_code}}\\src\\{{cookiecutter.app_name}}weapi\\obj\\",
+      "projectStyle": "PackageReference",
+      "fallbackFolders": [
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+      ],
+      "configFilePaths": [
+        "C:\\Users\\Stanley.Okeke\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+      ],
+      "originalTargetFrameworks": [
+        "net8.0"
+      ],
+      "sources": {
+        "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+        "C:\\Program Files\\dotnet\\library-packs": {},
+        "C:\\Users\\Stanley.Okeke\\Downloads\\nug": {},
+        "https://ap-nuget-1.asi.corp/dev/nuget": {},
+        "https://ap-nuget-1.asi.corp/rna/nuget": {},
+        "https://api.nuget.org/v3/index.json": {},
+        "https://gitlab.com/api/v4/groups/6052424/-/packages/nuget/index.json": {},
+        "https://gitlab.com/api/v4/projects/52670241/packages/nuget/index.json": {},
+        "https://gitlab.com/api/v4/projects/76940979/packages/nuget/index.json": {},
+        "https://nuget.org/api/v2/curated-feeds/microsoftdotnet/": {},
+        "https://uk-devpackmgt01.asi.corp/nuget/AppliedSystemsUKDevNuGet": {}
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "projectReferences": {}
+        }
+      },
+      "warningProperties": {
+        "warnAsError": [
+          "NU1605"
+        ]
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      },
+      "SdkAnalysisLevel": "9.0.100"
+    },
+    "frameworks": {
+      "net8.0": {
+        "targetAlias": "net8.0",
+        "dependencies": {
+          "DomainResult": {
+            "target": "Package",
+            "version": "[3.2.0, )"
+          },
+          "FluentValidation": {
+            "target": "Package",
+            "version": "[11.9.0, )"
+          },
+          "Flurl": {
+            "target": "Package",
+            "version": "[4.0.0, )"
+          },
+          "IdentityModel": {
+            "target": "Package",
+            "version": "[6.2.0, )"
+          },
+          "Keycloak.Net": {
+            "target": "Package",
+            "version": "[1.0.18, )"
+          },
+          "Microsoft.AspNetCore.Authentication.JwtBearer": {
+            "target": "Package",
+            "version": "[8.0.3, )"
+          },
+          "Microsoft.VisualStudio.Azure.Containers.Tools.Targets": {
+            "target": "Package",
+            "version": "[1.19.6, )"
+          },
+          "NodaTime": {
+            "target": "Package",
+            "version": "[3.1.11, )"
+          },
+          "Npgsql": {
+            "target": "Package",
+            "version": "[8.0.2, )"
+          },
+          "Npgsql.EntityFrameworkCore.PostgreSQL": {
+            "target": "Package",
+            "version": "[8.0.2, )"
+          },
+          "Npgsql.EntityFrameworkCore.PostgreSQL.Design": {
+            "target": "Package",
+            "version": "[1.1.0, )"
+          },
+          "Npgsql.EntityFrameworkCore.PostgreSQL.NodaTime": {
+            "target": "Package",
+            "version": "[8.0.2, )"
+          },
+          "Scrutor": {
+            "target": "Package",
+            "version": "[4.2.2, )"
+          },
+          "SendGrid": {
+            "target": "Package",
+            "version": "[9.29.2, )"
+          },
+          "Serilog": {
+            "target": "Package",
+            "version": "[3.1.1, )"
+          },
+          "Serilog.AspNetCore": {
+            "target": "Package",
+            "version": "[8.0.1, )"
+          },
+          "Serilog.Enrichers.Environment": {
+            "target": "Package",
+            "version": "[2.3.0, )"
+          },
+          "Serilog.Extensions.Hosting": {
+            "target": "Package",
+            "version": "[8.0.0, )"
+          },
+          "Serilog.Sinks.Async": {
+            "target": "Package",
+            "version": "[1.5.0, )"
+          },
+          "Serilog.Sinks.Console": {
+            "target": "Package",
+            "version": "[5.0.1, )"
+          },
+          "Serilog.Sinks.File": {
+            "target": "Package",
+            "version": "[5.0.0, )"
+          },
+          "Swashbuckle.AspNetCore": {
+            "target": "Package",
+            "version": "[6.4.0, )"
+          }
+        },
+        "imports": [
+          "net461",
+          "net462",
+          "net47",
+          "net471",
+          "net472",
+          "net48",
+          "net481"
+        ],
+        "assetTargetFallback": true,
+        "warn": true,
+        "frameworkReferences": {
+          "Microsoft.AspNetCore.App": {
+            "privateAssets": "none"
+          },
+          "Microsoft.NETCore.App": {
+            "privateAssets": "all"
+          }
+        },
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.102/PortableRuntimeIdentifierGraph.json"
+      }
+    }
+  },
+  "logs": [
+    {
+      "code": "NU1301",
+      "level": "Error",
+      "message": "Failed to retrieve information about 'Flurl' from remote source 'https://gitlab.com/api/v4/projects/52670241/packages/nuget/download/flurl/index.json'.\r\n  An attempt was made to access a socket in a way forbidden by its access permissions. (gitlab.com:443)\r\n  An attempt was made to access a socket in a way forbidden by its access permissions.",
+      "libraryId": "Flurl"
+    },
+    {
+      "code": "NU1301",
+      "level": "Error",
+      "message": "Failed to retrieve information about 'Flurl' from remote source 'https://gitlab.com/api/v4/projects/52670241/packages/nuget/download/flurl/index.json'.\r\n  An attempt was made to access a socket in a way forbidden by its access permissions. (gitlab.com:443)\r\n  An attempt was made to access a socket in a way forbidden by its access permissions.",
+      "libraryId": "Flurl"
+    },
+    {
+      "code": "NU1301",
+      "level": "Error",
+      "message": "Failed to retrieve information about 'System.Text.Json' from remote source 'https://nuget.org/api/v2/curated-feeds/microsoftdotnet/FindPackagesById()?id='System.Text.Json'&semVerLevel=2.0.0'.\r\n  An attempt was made to access a socket in a way forbidden by its access permissions. (nuget.org:443)\r\n  An attempt was made to access a socket in a way forbidden by its access permissions.",
+      "libraryId": "System.Text.Json"
+    },
+    {
+      "code": "NU1301",
+      "level": "Error",
+      "message": "Failed to retrieve information about 'System.Threading.Tasks.Extensions' from remote source 'https://nuget.org/api/v2/curated-feeds/microsoftdotnet/FindPackagesById()?id='System.Threading.Tasks.Extensions'&semVerLevel=2.0.0'.\r\n  An attempt was made to access a socket in a way forbidden by its access permissions. (nuget.org:443)\r\n  An attempt was made to access a socket in a way forbidden by its access permissions.",
+      "libraryId": "System.Threading.Tasks.Extensions"
+    },
+    {
+      "code": "NU1301",
+      "level": "Error",
+      "message": "Failed to retrieve information about 'Serilog.Sinks.Async' from remote source 'https://gitlab.com/api/v4/projects/76940979/packages/nuget/download/serilog.sinks.async/index.json'.\r\n  An attempt was made to access a socket in a way forbidden by its access permissions. (gitlab.com:443)\r\n  An attempt was made to access a socket in a way forbidden by its access permissions.",
+      "libraryId": "Serilog.Sinks.Async"
+    },
+    {
+      "code": "NU1301",
+      "level": "Error",
+      "message": "Failed to retrieve information about 'Serilog.Sinks.Async' from remote source 'https://gitlab.com/api/v4/projects/76940979/packages/nuget/download/serilog.sinks.async/index.json'.\r\n  An attempt was made to access a socket in a way forbidden by its access permissions. (gitlab.com:443)\r\n  An attempt was made to access a socket in a way forbidden by its access permissions.",
+      "libraryId": "Serilog.Sinks.Async"
+    }
+  ]
+}

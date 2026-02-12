@@ -1,0 +1,8 @@
+apiVersion: v2
+name: example-app
+version: 0.1.0
+appVersion: "1.0.0"
+dependencies:
+  - name: ag-helm-templates
+    version: 1.0.3
+    repository: file://../ag-helm

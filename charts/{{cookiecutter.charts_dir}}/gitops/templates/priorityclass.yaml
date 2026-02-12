@@ -1,0 +1,27 @@
+{% raw %}{{/* PriorityClass (guarded) */}}
+{{- if .Values.priorityClass.create }}
+{{- $pc := dict "Values" .Values -}}
+{{- $_ := set $pc "Name" .Values.priorityClass.name -}}
+{{- $_ := set $pc "Value" (required "priorityClass.value is required when priorityClass.create=true" .Values.priorityClass.value) -}}
+{{- $_ := set $pc "GlobalDefault" (default false .Values.priorityClass.globalDefault) -}}
+{{- $_ := set $pc "Description" (default "" .Values.priorityClass.description) -}}
+{{- $_ := set $pc "LabelData" "priorityclass.labels" -}}
+{{ include "ag-template.priorityclass" $pc }}
+{{- end }}
+
+{{/* Helper fragments used by ag-template.priorityclass */}}
+
+{{- define "priorityclass.labels" -}}
+app.kubernetes.io/part-of: {{ .Values.project | default "app" | quote }}
+{{- if .Values.environment }}
+environment: {{ .Values.environment | quote }}
+env: {{ default .Values.environment .Values.env | quote }}
+{{- end }}
+{{- if .Values.owner }}
+owner: {{ .Values.owner | quote }}
+{{- end }}
+{{- if .Values.project }}
+project: {{ .Values.project | quote }}
+{{- end }}
+{{- end }}
+{% endraw %}

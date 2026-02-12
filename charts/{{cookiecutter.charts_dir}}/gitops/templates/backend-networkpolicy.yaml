@@ -1,0 +1,22 @@
+{% raw %}{{/* Backend NetworkPolicy (guarded) */}}
+{{- if and .Values.backend .Values.backend.enabled (not (default false .Values.backend.skip)) }}
+{{- $backendName := .Values.backend.image.name | default "backend" -}}
+{{- $frontendName := .Values.frontend.image.name | default "frontend" -}}
+{{- $networkPolicy := dict "Values" .Values -}}
+{{- $_ := set $networkPolicy "ModuleValues" .Values.backend -}}
+{{- $_ := set $networkPolicy "ApplicationGroup" (.Values.project | default "app") -}}
+{{- $_ := set $networkPolicy "Name" $backendName -}}
+{{- $_ := set $networkPolicy "Namespace" .Release.Namespace -}}
+{{- $_ := set $networkPolicy "LabelData" "backend.pod.labels" -}}
+
+{{- $_ := set $networkPolicy "AllowIngressFrom" (dict
+  "apps" (list (dict "name" $frontendName "ports" (list 8080)))
+) -}}
+
+{{- $_ := set $networkPolicy "AllowEgressTo" (dict
+  "apps" (list (dict "name" "postgresql" "ports" (list 5432)))
+) -}}
+
+{{ include "ag-template.networkpolicy" $networkPolicy }}
+{{- end }}
+{% endraw %}

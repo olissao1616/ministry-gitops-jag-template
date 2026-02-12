@@ -1,0 +1,25 @@
+{% raw %}{{- if and .Values.backend .Values.backend.enabled (not (default false .Values.backend.skip)) .Values.backend.ingress.enabled }}
+{{- $appGroup := (default "app" .Values.project) -}}
+{{- $name := (default "backend" .Values.backend.image.name) -}}
+{{- $svcName := (printf "%s-%s" $appGroup $name | trunc 63 | trimSuffix "-") -}}
+
+{{- $ing := dict "Name" $svcName -}}
+{{- $_ := set $ing "Values" .Values -}}
+{{- $_ := set $ing "ModuleValues" .Values.backend -}}
+{{- $_ := set $ing "Namespace" $.Release.Namespace -}}
+{{- $_ := set $ing "Capabilities" $.Capabilities -}}
+{{- $_ := set $ing "ClassName" .Values.backend.ingress.className -}}
+{{- $_ := set $ing "Annotations" (default (dict) .Values.backend.ingress.annotations) -}}
+{{- $_ := set $ing "Tls" .Values.backend.ingress.tls -}}
+{{- $_ := set $ing "Hosts" .Values.backend.ingress.hosts -}}
+{{- $_ := set $ing "ServiceName" $svcName -}}
+{{- $_ := set $ing "ServicePort" .Values.backend.service.port -}}
+{{- $_ := set $ing "LabelData" "backend.pod.labels" -}}
+{{- $_ := set $ing "Labels" (dict
+  "app.kubernetes.io/name" $name
+  "app.kubernetes.io/part-of" $appGroup
+  "app.kubernetes.io/component" "backend"
+) -}}
+{{ include "ag-template.ingress" $ing }}
+{{- end }}
+{% endraw %}

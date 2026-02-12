@@ -1,0 +1,238 @@
+name: Setup repository via dispatch
+on:
+  repository_dispatch:
+    types: [repository_setup]
+  workflow_dispatch:
+    inputs:
+      LicensePlate:
+        description: "License plate"
+        required: true
+
+permissions:
+  contents: write
+  repository-projects: write
+
+jobs:
+  setup-dispatch:
+    if: ${{ github.repository != 'bcgov-c/ministry-gitops-jag-template' }}
+    name: Auto-reinitialize repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+        with:
+            token: ${{ secrets.GITHUB_TOKEN  }}
+      - name: Do not run scaffolding on template repository
+        shell: bash
+        # This workflow runs when the `cookiecutter.json` file is modified.
+        # This is the trick to re-init a repository, but we don't want to
+        # run this action if this file is modified in the origin template repository.
+        #
+        # Using the GitHub rest API allows us to identify if the current repository
+        # is a template repository or not.
+        run: |
+          curl --silent -X GET \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN  }}" \
+            -H "Accept: application/vnd.github.baptiste-preview+json" \
+            https://api.github.com/repos/$GITHUB_REPOSITORY \
+            | jq --exit-status '.is_template == false';
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: Install Cookiecutter
+        run: pip install cookiecutter
+
+      - uses: azure/setup-helm@v3
+        with:
+          version: "latest " # default is latest (stable)
+          token: ${{ secrets.GITHUB_TOKEN }} # only needed if version is 'latest'
+        id: install
+
+
+
+      - name: Create and Push Charts Template
+        run: |
+          cookiecutter \
+          ./charts \
+          --verbose \
+          --no-input \
+          app_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-app" | tr '[:upper:]' '[:lower:]') \
+          licence_plate=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}" | tr '[:upper:]' '[:lower:]') \
+          team_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-team" | tr '[:upper:]' '[:lower:]') \
+          project_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-project" | tr '[:upper:]' '[:lower:]') \
+          --output-dir ./cookiecutter-temp
+        env:
+          APP_NAME: ${{ github.event.client_payload.app_name || github.event.inputs.LicensePlate }}
+          LICENCE_PLATE: ${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}
+          TEAM_NAME: ${{ github.event.client_payload.team_name || github.event.inputs.LicensePlate }}
+          PROJECT_NAME: ${{ github.event.client_payload.project_name || github.event.inputs.LicensePlate }}
+    
+      - name: Create and Push Application Template
+        run: |
+          cookiecutter \
+          ./application \
+          --verbose \
+          --no-input \
+          app_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-app" | tr '[:upper:]' '[:lower:]') \
+          licence_plate=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}" | tr '[:upper:]' '[:lower:]') \
+          team_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-team" | tr '[:upper:]' '[:lower:]') \
+          project_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-project" | tr '[:upper:]' '[:lower:]') \
+          --output-dir ./cookiecutter-temp
+    
+      - name: Create and Push Application Code
+        run: |
+          cookiecutter \
+          ./appcode \
+          --verbose \
+          --no-input \
+          --output-dir ./cookiecutter-temp
+
+      # - name: Create and Push workflow Template
+      #   run: |
+      #     cookiecutter \
+      #     ./workflow \
+      #     --verbose \
+      #     --no-input \
+      #     app_name=$(echo "${{ github.event.client_payload.licence_plate }}-app" | tr '[:upper:]' '[:lower:]') \
+      #     licence_plate=$(echo "${{ github.event.client_payload.licence_plate }}" | tr '[:upper:]' '[:lower:]') \
+      #     team_name=$(echo "${{ github.event.client_payload.licence_plate }}-team" | tr '[:upper:]' '[:lower:]') \
+      #     project_name=$(echo "${{ github.event.client_payload.licence_plate }}-project" | tr '[:upper:]' '[:lower:]') \
+      #     --output-dir ./cookiecutter-temp
+
+      - name: Create and Push deploy Template
+        run: |
+          cookiecutter \
+          ./deploy \
+          --verbose \
+          --no-input \
+          app_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-app" | tr '[:upper:]' '[:lower:]') \
+          licence_plate=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}" | tr '[:upper:]' '[:lower:]') \
+          team_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-team" | tr '[:upper:]' '[:lower:]') \
+          project_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-project" | tr '[:upper:]' '[:lower:]') \
+          --output-dir ./cookiecutter-temp
+    
+      # - name: Create and Push RBAC Template
+      #   run: |
+      #     cookiecutter \
+      #     ./rbac \
+      #     --verbose \
+      #     --no-input \
+      #     app_name=$(echo "${{ github.event.client_payload.licence_plate }}-app" | tr '[:upper:]' '[:lower:]') \
+      #     licence_plate=$(echo "${{ github.event.client_payload.licence_plate }}" | tr '[:upper:]' '[:lower:]') \
+      #     team_name=$(echo "${{ github.event.client_payload.licence_plate }}-team" | tr '[:upper:]' '[:lower:]') \
+      #     project_name=$(echo "${{ github.event.client_payload.licence_plate }}-project" | tr '[:upper:]' '[:lower:]') \
+      #     --output-dir ./cookiecutter-temp
+
+   
+      - name: Prepare root directory
+        shell: bash
+        # Remove all files and folder exepct .git/ and cookiecutter-temp/
+        run: |
+          find ./ -maxdepth 1 \
+          ! -name '.git' \
+          ! -name 'cookiecutter-temp' \
+          ! -name 'README.md' \
+          ! -name '.github' \
+          ! -name '.' \
+          ! -exec rm -rf {} +
+
+      - name: Move files to root
+        shell: bash
+        # The cookiecutter-temp/ folder contains a single folder which is the
+        # generated project by cookiecutter. We want to move all the project
+        # files into the root directory so we can reinitialize git in the next step
+        run: |
+          shopt -s dotglob
+          rsync -r ./cookiecutter-temp/* . && \
+          rm -rf ./cookiecutter-temp/
+          shopt -u dotglob
+    
+      - name: Replace Placeholders
+        id: placeholder
+        run: |
+            sed -i "s/\$app/${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-app/g; s/\$namespace/${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}/g; s/\$team/${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-team/g" README.md
+
+           
+      - name: Repackage Helm
+        id: helm
+        run: |
+            # Repackage Helm Chart
+            cd charts/gitops/charts  
+            helm package ../../webapi-core/
+            helm package ../../react-baseapp/
+
+      - name: Reinitialize git repository
+        shell: bash
+        # Reinitialize git after scaffolding this repository.
+        # We use `git checkout --orphan` to create a branch in a git init-like state.
+        # By force pushing this as `main` we end up with a new clean git history.
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+          rm -rf .github/workflows/setup-repository.yml
+          rm -rf .github/workflows/repository-setup.yml
+
+          git add .
+          git commit -m "Automated commit: Create Cookiecutter template"
+          git push origin main
+
+          git checkout -b test main
+          git push origin test
+
+          git checkout -b develop main
+          git push origin develop
+
+
+      # this step does not work due to limitation of GITHUB_TOKEN creating branch protection
+      - name: Configure Branch Protection
+        run: |
+              curl -L \
+              -X PUT \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/${{ github.repository }}/branches/main/protection \
+              -d '{
+                  "required_status_checks": {
+                    "strict": true,
+                    "contexts": ["policy-check"]
+                  },
+                  "enforce_admins": true,
+                  "required_pull_request_reviews": {
+                    "dismiss_stale_reviews": true,
+                    "require_code_owner_reviews": true,
+                    "required_approving_review_count": 2,
+                    "require_last_push_approval": true,
+                    "bypass_pull_request_allowances": {
+                      "teams": ["ag-pssg-emerald", "ag-pssg-isb"]
+                    }
+                  },
+                  "restrictions": {
+                    "users": ["ag-pssg-isb-sa"],
+                    "teams": ["ag-pssg-emerald", "ag-pssg-isb"]
+                  },
+                  "required_linear_history": true,
+                  "block_creations": true,
+                  "required_conversation_resolution": true,
+                  "lock_branch": true,
+                  "allow_fork_syncing": true
+                }'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Repository Dispatch
+      #   uses: peter-evans/repository-dispatch@v3
+      #   with:
+      #     token: ${{ secrets.GITHUB_TOKEN }}
+      #     repository: bcgov-c/ministry-gitops-jag
+      #     event-type: rbac_setup
+      #     client-payload: '{"licence_plate": "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}"}'
+
+  # trigger-rbac:
+  #   needs: [setup-dispatch] 
+  #   uses: bcgov-c/ministry-gitops-jag/.github/workflows/default-rbac.yml@template
+  #   with:
+  #     licence_plate: ${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}

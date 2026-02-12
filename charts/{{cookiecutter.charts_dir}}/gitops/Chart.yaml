@@ -1,0 +1,24 @@
+apiVersion: v2
+name: {{ cookiecutter.app_name }}-gitops
+description: GitOps deployment chart for {{ cookiecutter.app_name }} using ag-helm shared library
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  # Shared Helm library - all deployments use this
+  # For production: Use OCI registry (recommended)
+  - name: ag-helm-templates
+    version: 1.0.3
+    repository: "oci://ghcr.io/olissao1616/helm"
+  
+  # For local development: Uncomment below and comment out OCI registry above
+  # - name: ag-helm-templates
+  #   version: 1.0.3
+  #   repository: file://../../../shared-lib/ag-helm
+
+  # External dependencies (Bitnami charts)
+  - name: postgresql
+    version: "{{ cookiecutter.postgresql_version }}"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled

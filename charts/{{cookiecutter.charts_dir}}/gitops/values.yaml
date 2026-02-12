@@ -1,0 +1,172 @@
+# {{ cookiecutter.app_name }}-charts/values.yaml
+my_app_name: "{{ cookiecutter.app_name }}"
+
+postgresql:
+  enabled: false
+  auth:
+    username: appuser
+    password: changeme
+    database: appdb
+  primary:
+    persistence:
+      enabled: true
+      size: 256Mi
+    resources:
+      limits:
+        cpu: 50m
+        memory: 256Mi
+        ephemeral-storage: 256Mi
+      requests:
+        cpu: 20m
+        memory: 100Mi
+        ephemeral-storage: 128Mi
+  commonAnnotations:
+    {}
+
+# Global project settings
+project: "{{ cookiecutter.app_name }}"
+environment: dev
+
+# Keycloak/SSO configuration (shared by frontend and backend)
+keycloak:
+  enabled: false
+  authUrl: ""
+  realm: ""
+  realmUrl: ""
+  clientId: ""
+  adminClientId: ""
+
+# Database configuration (used by backend)
+database:
+  enabled: false
+  connectionString: ""
+
+# Frontend application (React/Next.js)
+frontend:
+  enabled: false
+  image:
+    repository: sookeke/react-baseapp
+    tag: "nextjs"
+    digest: "" # Optional: sha256:... (overrides tag when set)
+    pullPolicy: Always
+
+  replicaCount: 1
+  dataClass: "medium"  # low, medium, or high
+
+  service:
+    type: ClusterIP
+    port: 8000
+
+  route:
+    enabled: true
+    host: frontend-{{cookiecutter.licence_plate}}-dev.apps.gold.devops.gov.bc.ca
+    annotations: {}
+
+  serviceAccount:
+    create: true
+    automount: true
+    annotations: {}
+
+  # Optional: set a PriorityClass for this workload
+  priorityClassName: ""
+
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+
+  resources:
+    limits:
+      cpu: 50m
+      memory: 128Mi
+      ephemeral-storage: 256Mi
+    requests:
+      cpu: 20m
+      memory: 50Mi
+      ephemeral-storage: 128Mi
+
+  podLabels: {}
+  podAnnotations: {}
+  commonAnnotations: {}
+
+  volumes: []
+  volumeMounts: []
+  extraEnv: []
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Backend application (.NET API)
+backend:
+  enabled: false
+  image:
+    repository: sookeke/web-api
+    tag: "v2"
+    digest: "" # Optional: sha256:... (overrides tag when set)
+    pullPolicy: Always
+
+  replicaCount: 1
+  dataClass: "medium"  # low, medium, or high
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: chart-example.local
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls: []
+
+  serviceAccount:
+    create: true
+    automount: true
+    annotations: {}
+
+  # Optional: set a PriorityClass for this workload
+  priorityClassName: ""
+
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+
+  resources:
+    limits:
+      cpu: 50m
+      memory: 128Mi
+      ephemeral-storage: 256Mi
+    requests:
+      cpu: 20m
+      memory: 50Mi
+      ephemeral-storage: 128Mi
+
+  podLabels: {}
+  podAnnotations: {}
+  commonAnnotations: {}
+
+  volumes: []
+  volumeMounts: []
+  extraEnv: []
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Optional: create a PriorityClass for the workloads to use
+priorityClass:
+  create: false
+  name: "{{ cookiecutter.app_name }}-normal"
+  value: 1000
+  globalDefault: false
+  description: "Default application priority"

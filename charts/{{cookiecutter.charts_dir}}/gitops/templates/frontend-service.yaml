@@ -1,0 +1,21 @@
+{% raw %}{{/* Frontend Service (guarded) */}}
+{{- if and .Values.frontend .Values.frontend.enabled (not (default false .Values.frontend.skip)) }}
+{{- $serviceConfig := dict "Values" .Values -}}
+{{- $_ := set $serviceConfig "Namespace" $.Release.Namespace -}}
+{{- $_ := set $serviceConfig "ApplicationGroup" (default "app" .Values.project) -}}
+{{- $_ := set $serviceConfig "Name" (default "frontend" .Values.frontend.image.name) -}}
+{{- $_ := set $serviceConfig "ModuleValues" .Values.frontend -}}
+{{- $_ := set $serviceConfig "ServicePorts" "frontend.service.ports" -}}
+{{- $_ := set $serviceConfig "LabelData" "frontend.pod.labels" -}}
+{{ include "ag-template.service" $serviceConfig }}
+{{- end }}
+
+{{/* Helper fragments used by ag-template.service */}}
+
+{{- define "frontend.service.ports" }}
+- name: http
+  port: {{ dig "service" "port" 8000 .ModuleValues }}
+  targetPort: http
+  protocol: TCP
+{{- end }}
+{% endraw %}

@@ -1,0 +1,15 @@
+{% raw %}{{- if and .Values.frontend .Values.frontend.enabled (not (default false .Values.frontend.skip)) }}
+{{- $routeConfig := dict "Values" .Values -}}
+{{- $_ := set $routeConfig "Namespace" $.Release.Namespace -}}
+{{- $_ := set $routeConfig "ApplicationGroup" (default "app" .Values.project) -}}
+{{- $_ := set $routeConfig "Name" (default "frontend" .Values.frontend.image.name) -}}
+{{- $_ := set $routeConfig "ModuleValues" .Values.frontend -}}
+{{- $_ := set $routeConfig "LabelData" "frontend.pod.labels" -}}
+{{- $_ := set $routeConfig "Labels" (dict
+  "app.kubernetes.io/name" (default "frontend" .Values.frontend.image.name)
+  "app.kubernetes.io/part-of" (default "app" .Values.project)
+  "app.kubernetes.io/component" "frontend"
+) -}}
+{{ include "ag-template.route.openshift" $routeConfig }}
+{{- end }}
+{% endraw %}

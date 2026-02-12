@@ -1,0 +1,44 @@
+checks:
+  # Security
+  hostIPCSet: danger
+  hostPIDSet: danger
+  hostNetworkSet: danger
+  privilegeEscalationAllowed: danger
+  runAsRootAllowed: warning
+  runAsPrivileged: danger
+  notReadOnlyRootFilesystem: warning
+  cpuRequestsMissing: warning
+  cpuLimitsMissing: warning
+  memoryRequestsMissing: warning
+  memoryLimitsMissing: warning
+
+  # Images
+  tagNotSpecified: danger
+  pullPolicyNotAlways: ignore
+
+  # Health checks
+  readinessProbeMissing: warning
+  livenessProbeMissing: warning
+
+  # Networking
+  tlsSettingsMissing: warning
+
+  # Project-specific
+  deploymentMissingReplicas: warning
+  priorityClassNotSet: ignore
+
+exemptions:
+  - namespace: kube-system
+  - namespace: kube-public
+  - controllerNames:
+      - kube-dns
+      - kube-proxy
+      - calico-node
+      - kindnet
+  # Bitnami Postgres uses *_PASSWORD_FILE env vars (file paths, not secret values)
+  - controllerNames:
+      - myapp-postgresql
+    rules:
+      - sensitiveContainerEnvVar
+
+mutations: []

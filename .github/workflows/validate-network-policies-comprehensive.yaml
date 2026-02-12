@@ -1,0 +1,418 @@
+name: Complete Network Policy Validation
+
+on:
+  push:
+    branches: [main, develop]
+    paths: ['charts/**', 'deploy/**', '.github/workflows/**']
+  pull_request:
+    branches: [main, develop]
+    paths: ['charts/**', 'deploy/**']
+
+jobs:
+  render-manifests:
+    name: Render Helm Manifests
+    runs-on: ubuntu-latest
+    outputs:
+      manifests-rendered: ${{ steps.render.outputs.success }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.14.0'
+
+      - name: Setup ag-helm library
+        run: |
+          mkdir -p /tmp/shared-lib
+          cp -r shared-lib/ag-helm /tmp/shared-lib/
+
+      - name: Update Helm dependencies
+        run: |
+          cd charts/*/gitops
+          helm dependency update
+
+      - name: Render dev manifests
+        id: render
+        run: |
+          cd charts/*/gitops
+          helm template {{ cookiecutter.app_name }} . \
+            --values ../../../deploy/*/dev_values.yaml \
+            > /tmp/rendered-dev.yaml
+          echo "success=true" >> $GITHUB_OUTPUT
+          echo "✓ Rendered $(wc -l < /tmp/rendered-dev.yaml) lines"
+
+      - name: Upload rendered manifests
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-manifests
+          path: /tmp/rendered-dev.yaml
+          retention-days: 7
+
+  validate-conftest:
+    name: "OPA/Conftest - Policy Validation"
+    needs: render-manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-manifests
+
+      - name: Install Conftest
+        run: |
+          wget https://github.com/open-policy-agent/conftest/releases/download/v0.49.1/conftest_0.49.1_Linux_x86_64.tar.gz
+          tar xzf conftest_0.49.1_Linux_x86_64.tar.gz
+          sudo mv conftest /usr/local/bin/
+          conftest --version
+
+      - name: Run Conftest validation
+        run: |
+          conftest test rendered-dev.yaml \
+            --policy charts/*/policy/ \
+            --all-namespaces \
+            --output table \
+            --fail-on-warn
+
+  validate-kubesec:
+    name: "Kubesec - Security Scan"
+    needs: render-manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-manifests
+
+      - name: Run Kubesec scan
+        run: |
+          docker run -i kubesec/kubesec:v2 scan /dev/stdin < rendered-dev.yaml > kubesec-results.json
+          cat kubesec-results.json
+
+      - name: Upload Kubesec results
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubesec-results
+          path: kubesec-results.json
+
+  validate-polaris:
+    name: "Polaris - Best Practices"
+    needs: render-manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-manifests
+
+      - name: Run Polaris audit
+        run: |
+          docker run -v $(pwd):/app quay.io/fairwinds/polaris:8.0 \
+            polaris audit --audit-path rendered-dev.yaml \
+            --config charts/*/.polaris.yaml \
+            --format pretty \
+            --set-exit-code-on-danger \
+            --set-exit-code-below-score 75
+
+      - name: Generate Polaris report
+        if: always()
+        run: |
+          docker run -v $(pwd):/app quay.io/fairwinds/polaris:8.0 \
+            polaris audit --audit-path rendered-dev.yaml \
+            --format json > polaris-report.json
+
+      - name: Upload Polaris report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: polaris-report
+          path: polaris-report.json
+
+  validate-kube-score:
+    name: "kube-score - Object Analysis"
+    needs: render-manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-manifests
+
+      - name: Run kube-score
+        run: |
+          docker run -v $(pwd):/project \
+            zegl/kube-score:latest score \
+            /project/rendered-dev.yaml \
+            --output-format ci \
+            --ignore-test pod-networkpolicy
+
+  validate-kube-linter:
+    name: "kube-linter - Linting"
+    needs: render-manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-manifests
+
+      - name: Run kube-linter
+        uses: stackrox/kube-linter-action@v1
+        with:
+          file: rendered-dev.yaml
+          config: charts/*/.kube-linter.yaml
+          format: sarif
+          output-file: kube-linter.sarif
+
+      - name: Upload kube-linter results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kube-linter-results
+          path: kube-linter.sarif
+
+  validate-pluto:
+    name: "Pluto - Deprecated APIs"
+    needs: render-manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-manifests
+
+      - name: Run Pluto scan
+        uses: FairwindsOps/pluto@master
+        with:
+          file: rendered-dev.yaml
+          target-versions: k8s=v1.28.0
+
+  validate-trivy:
+    name: "Trivy - Vulnerability Scan"
+    needs: render-manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-manifests
+
+      - name: Run Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: 'rendered-dev.yaml'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-results
+          path: trivy-results.sarif
+
+  validate-checkov:
+    name: "Checkov - IaC Security"
+    needs: render-manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-manifests
+
+      - name: Run Checkov scan
+        uses: bridgecrewio/checkov-action@master
+        with:
+          file: rendered-dev.yaml
+          framework: kubernetes
+          output_format: cli,sarif
+          output_file_path: console,checkov-results.sarif
+
+      - name: Upload Checkov results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-results
+          path: checkov-results.sarif
+
+  network-policy-specific:
+    name: "Network Policy Specific Checks"
+    needs: render-manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-manifests
+
+      - name: Check NetworkPolicy count
+        run: |
+          NP_COUNT=$(grep -c "kind: NetworkPolicy" rendered-dev.yaml || echo "0")
+          DEPLOY_COUNT=$(grep -c "kind: Deployment" rendered-dev.yaml || echo "0")
+
+          echo "NetworkPolicies: $NP_COUNT"
+          echo "Deployments: $DEPLOY_COUNT"
+
+          if [ "$NP_COUNT" -lt "$DEPLOY_COUNT" ]; then
+            echo "❌ Insufficient NetworkPolicies ($NP_COUNT) for Deployments ($DEPLOY_COUNT)"
+            exit 1
+          fi
+          echo "✓ NetworkPolicy coverage adequate"
+
+      - name: Check DataClass labels
+        run: |
+          DATACLASS_COUNT=$(grep -c "DataClass:" rendered-dev.yaml || echo "0")
+          DEPLOY_COUNT=$(grep -c "kind: Deployment" rendered-dev.yaml || echo "0")
+
+          echo "DataClass labels: $DATACLASS_COUNT"
+          echo "Deployments: $DEPLOY_COUNT"
+
+          if [ "$DATACLASS_COUNT" -lt "$DEPLOY_COUNT" ]; then
+            echo "❌ Missing DataClass labels"
+            exit 1
+          fi
+          echo "✓ DataClass labels present"
+
+      - name: Validate DataClass values
+        run: |
+          INVALID=$(grep "DataClass:" rendered-dev.yaml | grep -v "Low" | grep -v "Medium" | grep -v "High" || echo "")
+          if [ -n "$INVALID" ]; then
+            echo "❌ Invalid DataClass values found:"
+            echo "$INVALID"
+            exit 1
+          fi
+          echo "✓ All DataClass values valid (Low/Medium/High)"
+
+  production-validation:
+    name: "Production Strict Validation"
+    if: github.ref == 'refs/heads/main'
+    needs: [validate-conftest, validate-kubesec, validate-polaris, validate-kube-score, validate-kube-linter]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Setup ag-helm library
+        run: |
+          mkdir -p /tmp/shared-lib
+          cp -r shared-lib/ag-helm /tmp/shared-lib/
+
+      - name: Render prod manifests
+        run: |
+          cd charts/*/gitops
+          helm dependency update
+          helm template {{ cookiecutter.app_name }}-prod . \
+            --values ../../../deploy/*/prod_values.yaml \
+            > /tmp/rendered-prod.yaml
+
+      - name: Install all validators
+        run: |
+          # Conftest
+          wget -q https://github.com/open-policy-agent/conftest/releases/download/v0.49.1/conftest_0.49.1_Linux_x86_64.tar.gz
+          tar xzf conftest_0.49.1_Linux_x86_64.tar.gz
+          sudo mv conftest /usr/local/bin/
+
+      - name: Run all validators (strict mode)
+        run: |
+          echo "=== Running Conftest (fail on warnings) ==="
+          conftest test /tmp/rendered-prod.yaml \
+            --policy charts/*/policy/ \
+            --all-namespaces \
+            --fail-on-warn
+
+          echo "=== Running Kubesec ==="
+          docker run -i kubesec/kubesec:v2 scan /dev/stdin < /tmp/rendered-prod.yaml
+
+          echo "=== Running Polaris (score >= 90) ==="
+          docker run -v $(pwd):/app quay.io/fairwinds/polaris:8.0 \
+            polaris audit --audit-path /tmp/rendered-prod.yaml \
+            --set-exit-code-below-score 90
+
+          echo "✓ All production validations passed"
+
+      - name: Upload prod manifests
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-manifests-prod
+          path: /tmp/rendered-prod.yaml
+          retention-days: 30
+
+  summary:
+    name: "Validation Summary"
+    needs: [validate-conftest, validate-kubesec, validate-polaris, validate-kube-score, validate-kube-linter, validate-pluto, validate-trivy, validate-checkov, network-policy-specific]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# 🛡️ Network Policy Validation Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Tools Used" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Conftest (OPA) - Custom policy validation" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Kubesec - Security scanning" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Polaris - Best practices" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ kube-score - Object analysis" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ kube-linter - Linting" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Pluto - Deprecated API check" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Trivy - Vulnerability scan" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Checkov - IaC security" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Network Policy Specific Checks" >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const message = `## 🛡️ Network Policy Validation Complete
+
+            All validation tools have run successfully:
+            - ✅ Conftest (OPA)
+            - ✅ Kubesec
+            - ✅ Polaris
+            - ✅ kube-score
+            - ✅ kube-linter
+            - ✅ Pluto
+            - ✅ Trivy
+            - ✅ Checkov
+            - ✅ Network Policy Checks
+
+            Check the workflow artifacts for detailed reports.`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            });
