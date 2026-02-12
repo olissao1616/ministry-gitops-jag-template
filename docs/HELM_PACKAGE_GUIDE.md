@@ -38,7 +38,7 @@ dependencies:
 ### 2. Update Dependencies
 
 ```bash
-cd charts/myapp-charts/gitops
+cd myapp-gitops/charts/gitops
 helm dependency update
 ```
 

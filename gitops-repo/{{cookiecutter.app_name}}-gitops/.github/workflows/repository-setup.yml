@@ -1,3 +1,4 @@
+{% raw %}
 name: Setup repository via dispatch
 on:
   repository_dispatch:
@@ -53,78 +54,19 @@ jobs:
 
 
 
-      - name: Create and Push Charts Template
+      - name: Generate GitOps Repository
         run: |
           cookiecutter \
-          ./charts \
+          ./gitops-repo \
           --verbose \
           --no-input \
           app_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-app" | tr '[:upper:]' '[:lower:]') \
           licence_plate=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}" | tr '[:upper:]' '[:lower:]') \
-          team_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-team" | tr '[:upper:]' '[:lower:]') \
-          project_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-project" | tr '[:upper:]' '[:lower:]') \
+          description="GitOps repository for ${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}" \
           --output-dir ./cookiecutter-temp
         env:
           APP_NAME: ${{ github.event.client_payload.app_name || github.event.inputs.LicensePlate }}
           LICENCE_PLATE: ${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}
-          TEAM_NAME: ${{ github.event.client_payload.team_name || github.event.inputs.LicensePlate }}
-          PROJECT_NAME: ${{ github.event.client_payload.project_name || github.event.inputs.LicensePlate }}
-    
-      - name: Create and Push Application Template
-        run: |
-          cookiecutter \
-          ./application \
-          --verbose \
-          --no-input \
-          app_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-app" | tr '[:upper:]' '[:lower:]') \
-          licence_plate=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}" | tr '[:upper:]' '[:lower:]') \
-          team_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-team" | tr '[:upper:]' '[:lower:]') \
-          project_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-project" | tr '[:upper:]' '[:lower:]') \
-          --output-dir ./cookiecutter-temp
-    
-      - name: Create and Push Application Code
-        run: |
-          cookiecutter \
-          ./appcode \
-          --verbose \
-          --no-input \
-          --output-dir ./cookiecutter-temp
-
-      # - name: Create and Push workflow Template
-      #   run: |
-      #     cookiecutter \
-      #     ./workflow \
-      #     --verbose \
-      #     --no-input \
-      #     app_name=$(echo "${{ github.event.client_payload.licence_plate }}-app" | tr '[:upper:]' '[:lower:]') \
-      #     licence_plate=$(echo "${{ github.event.client_payload.licence_plate }}" | tr '[:upper:]' '[:lower:]') \
-      #     team_name=$(echo "${{ github.event.client_payload.licence_plate }}-team" | tr '[:upper:]' '[:lower:]') \
-      #     project_name=$(echo "${{ github.event.client_payload.licence_plate }}-project" | tr '[:upper:]' '[:lower:]') \
-      #     --output-dir ./cookiecutter-temp
-
-      - name: Create and Push deploy Template
-        run: |
-          cookiecutter \
-          ./deploy \
-          --verbose \
-          --no-input \
-          app_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-app" | tr '[:upper:]' '[:lower:]') \
-          licence_plate=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}" | tr '[:upper:]' '[:lower:]') \
-          team_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-team" | tr '[:upper:]' '[:lower:]') \
-          project_name=$(echo "${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-project" | tr '[:upper:]' '[:lower:]') \
-          --output-dir ./cookiecutter-temp
-    
-      # - name: Create and Push RBAC Template
-      #   run: |
-      #     cookiecutter \
-      #     ./rbac \
-      #     --verbose \
-      #     --no-input \
-      #     app_name=$(echo "${{ github.event.client_payload.licence_plate }}-app" | tr '[:upper:]' '[:lower:]') \
-      #     licence_plate=$(echo "${{ github.event.client_payload.licence_plate }}" | tr '[:upper:]' '[:lower:]') \
-      #     team_name=$(echo "${{ github.event.client_payload.licence_plate }}-team" | tr '[:upper:]' '[:lower:]') \
-      #     project_name=$(echo "${{ github.event.client_payload.licence_plate }}-project" | tr '[:upper:]' '[:lower:]') \
-      #     --output-dir ./cookiecutter-temp
 
    
       - name: Prepare root directory
@@ -146,23 +88,23 @@ jobs:
         # files into the root directory so we can reinitialize git in the next step
         run: |
           shopt -s dotglob
-          rsync -r ./cookiecutter-temp/* . && \
+          rsync -r ./cookiecutter-temp/*/ . && \
           rm -rf ./cookiecutter-temp/
           shopt -u dotglob
+
+      - name: Clean up template folders
+        shell: bash
+        run: |
+          rm -rf charts/ deploy/ application/ appcode/ gitops-repo/ rbac/ workflow/ shared-lib/
+
+      - name: Update Helm dependencies
+        run: |
+          helm dependency update ./charts/gitops
     
       - name: Replace Placeholders
         id: placeholder
         run: |
             sed -i "s/\$app/${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-app/g; s/\$namespace/${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}/g; s/\$team/${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}-team/g" README.md
-
-           
-      - name: Repackage Helm
-        id: helm
-        run: |
-            # Repackage Helm Chart
-            cd charts/gitops/charts  
-            helm package ../../webapi-core/
-            helm package ../../react-baseapp/
 
       - name: Reinitialize git repository
         shell: bash
@@ -236,3 +178,5 @@ jobs:
   #   uses: bcgov-c/ministry-gitops-jag/.github/workflows/default-rbac.yml@template
   #   with:
   #     licence_plate: ${{ github.event.client_payload.LicensePlate || github.event.inputs.LicensePlate }}
+
+{% endraw %}

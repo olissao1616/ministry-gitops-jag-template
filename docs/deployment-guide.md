@@ -48,21 +48,10 @@ Before deploying, ensure you have:
 If you haven't already, generate your GitOps repository:
 
 ```bash
-# Generate charts
-cd charts
-cookiecutter . --no-input \
+cookiecutter ./gitops-repo --no-input \
   app_name=myapp \
   licence_plate=abc123 \
-  charts_dir=myapp-charts
-
-# Generate deploy configs
-cd ../deploy
-cookiecutter . --no-input \
-  app_name=myapp \
-  licence_plate=abc123 \
-  deploy_dir=myapp-deploy \
-  team_name=myteam \
-  project_name=myproject
+  github_org=bcgov-c
 ```
 
 ## Step 2: Configure Values Files

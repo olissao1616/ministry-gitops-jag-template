@@ -34,18 +34,17 @@ success "ag-helm library found"
 echo ""
 echo "Step 2: Running cookiecutter to generate test project..."
 rm -rf /tmp/test-gitops-unified
-cd charts
-cookiecutter . --no-input \
-    --output-dir /tmp/test-gitops-unified \
-    app_name=testapp \
-    licence_plate=abc123 \
-    charts_dir=testapp-charts
+cookiecutter ./gitops-repo --no-input \
+  --output-dir /tmp/test-gitops-unified \
+  app_name=testapp \
+  licence_plate=abc123 \
+  github_org=bcgov-c
 
 success "Cookiecutter generation complete"
 
 echo ""
 echo "Step 3: Updating Helm dependencies..."
-cd /tmp/test-gitops-unified/testapp-charts/gitops
+cd /tmp/test-gitops-unified/testapp-gitops/charts/gitops
 helm dependency update
 success "Dependencies updated"
 

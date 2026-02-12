@@ -38,52 +38,25 @@ kubectl delete pods,svc,hpa,deploy,statefulset -n default -l app.kubernetes.io/i
 success "Cleanup complete"
 
 echo ""
-info "Step 2: Checking ag-helm shared library..."
-if [ ! -d "shared-lib/ag-helm" ]; then
-    error "ag-helm library not found"
-fi
-success "ag-helm library found"
-
-echo ""
-info "Step 3: Setting up shared library..."
-rm -rf /tmp/shared-lib
-mkdir -p /tmp/shared-lib
-cp -r shared-lib/ag-helm /tmp/shared-lib/
-success "Shared library copied"
-
-echo ""
-info "Step 4: Generating charts with cookiecutter..."
+info "Step 2: Generating GitOps repo with cookiecutter..."
 rm -rf /tmp/test-deployment
-cd charts
-cookiecutter . --no-input \
+cookiecutter ./gitops-repo --no-input \
     app_name=testapp \
     licence_plate=test123 \
-    charts_dir=testapp-charts \
+    github_org=bcgov-c \
     --output-dir /tmp/test-deployment
-success "Charts generated"
+success "GitOps repo generated"
 
 echo ""
-info "Step 5: Generating deploy configs with cookiecutter..."
-cd ../deploy
-cookiecutter . --no-input \
-    app_name=testapp \
-    licence_plate=test123 \
-    deploy_dir=testapp-deploy \
-    team_name=testteam \
-    project_name=testproject \
-    --output-dir /tmp/test-deployment
-success "Deploy configs generated"
-
-echo ""
-info "Step 6: Updating Helm dependencies..."
-cd /tmp/test-deployment/testapp-charts/gitops
+info "Step 3: Updating Helm dependencies..."
+cd /tmp/test-deployment/testapp-gitops/charts/gitops
 helm dependency update > /dev/null 2>&1
 success "Dependencies updated"
 
 echo ""
-info "Step 7: Deploying with Helm using dev_values.yaml..."
+info "Step 4: Deploying with Helm using dev_values.yaml..."
 helm install testapp . \
-    --values /tmp/test-deployment/testapp-deploy/dev_values.yaml \
+    --values /tmp/test-deployment/testapp-gitops/deploy/dev_values.yaml \
     --set frontend.route.enabled=false \
     --namespace default \
     --wait \
@@ -91,7 +64,7 @@ helm install testapp . \
 success "Helm deployment complete"
 
 echo ""
-info "Step 8: Waiting for all pods to be ready..."
+info "Step 5: Waiting for all pods to be ready..."
 sleep 10
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/part-of=app -n default --timeout=120s 2>/dev/null || true
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=testapp -n default --timeout=120s 2>/dev/null || true

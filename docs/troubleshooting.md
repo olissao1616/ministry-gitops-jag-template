@@ -44,16 +44,12 @@ pipx install cookiecutter
 Error: directory ../../../shared-lib/ag-helm not found
 ```
 
-**Cause:** The ag-helm shared library isn't in the expected location.
+**Cause:** Your Helm dependency configuration is pointing at a local `file://` path for the shared library.
 
-**Solution:**
+**Solution:** Ensure `charts/gitops/Chart.yaml` uses the OCI dependency for `ag-helm-templates`, then update dependencies:
+
 ```bash
-# Copy ag-helm to expected location
-mkdir -p /tmp/shared-lib
-cp -r shared-lib/ag-helm /tmp/shared-lib/
-
-# Update dependencies
-cd charts/myapp-charts/gitops
+cd myapp-gitops/charts/gitops
 helm dependency update
 ```
 
@@ -358,7 +354,7 @@ Error: found in Chart.yaml, but missing in charts/ directory
 
 **Solution:**
 ```bash
-cd charts/myapp-charts/gitops
+cd myapp-gitops/charts/gitops
 helm dependency update
 ```
 

@@ -1,0 +1,75 @@
+{% raw %}
+name: "K8s Security Policy Check"
+
+on:
+  push:
+    branches:
+      - main
+      - test
+      - develop
+    tags:
+      - "*"
+
+  pull_request:
+    branches:
+      - main
+      - test
+      - develop
+
+jobs:
+  policy-check:
+    if: ${{ github.repository != 'bcgov-c/ministry-gitops-jag-template' }}
+    name: policy-check
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: "v3.14.4"
+          token: ${{ secrets.GITHUB_TOKEN }}
+        id: install
+
+      - name: Install Datree plugin
+        run: |
+          helm plugin install https://github.com/datreeio/helm-datree
+          helm plugin update datree
+          helm datree config set offline local
+
+      - name: Download centralized Datree policies
+        run: |
+          mkdir -p /tmp/policies
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -L https://raw.githubusercontent.com/{% endraw %}{{cookiecutter.github_org}}{% raw %}/ministry-gitops-jag-template/main/policies/datree-policies.yaml \
+            -o /tmp/datree-policies.yaml
+
+      - name: Policy Enforcement
+        id: policy
+        run: |
+          # Run datree config scan against ISB K8s policies
+          if [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
+            echo "Testing main branch (prod)"
+            helm datree test --ignore-missing-schemas \
+              --policy-config /tmp/datree-policies.yaml \
+              --include-tests ./charts/gitops \
+              -- --namespace prod --values ./deploy/prod_values.yaml gitops-app-prod
+          elif [[ "$GITHUB_REF" == "refs/heads/develop" || "$GITHUB_REF" == "refs/heads/gitops" ]]; then
+            echo "Testing dev branch"
+            helm datree test --ignore-missing-schemas \
+              --policy-config /tmp/datree-policies.yaml \
+              --include-tests ./charts/gitops \
+              -- --namespace dev --values ./deploy/dev_values.yaml gitops-app-dev
+          elif [[ "$GITHUB_REF" == "refs/heads/test" ]]; then
+            echo "Testing test branch"
+            helm datree test --ignore-missing-schemas \
+              --policy-config /tmp/datree-policies.yaml \
+              --include-tests ./charts/gitops \
+              -- --namespace test --values ./deploy/test_values.yaml gitops-app-test
+          else
+            echo "Branch: $GITHUB_REF - skipping policy check"
+          fi
+
+{% endraw %}
