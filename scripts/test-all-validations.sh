@@ -8,7 +8,11 @@ echo "========================================="
 echo ""
 
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TEST_DIR="${TEST_DIR:-${BASE_DIR}/test-output}"
+REPO_ROOT="$(cd "${BASE_DIR}/.." && pwd)"
+
+# Default to a repo-root test-output folder so this script works from any CWD and
+# aligns with test-all-validations.bat.
+TEST_DIR="${TEST_DIR:-${REPO_ROOT}/test-output}"
 
 cookiecutter_install_python() {
     # Try to install cookiecutter into the current user's Python environment.
@@ -67,7 +71,7 @@ cookiecutter_run() {
     # Only attempt this when the Docker daemon is reachable; otherwise fail with actionable guidance.
     if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
         docker run --rm \
-            -v "${BASE_DIR}:/work" \
+            -v "${REPO_ROOT}:/work" \
             -w /work \
             python:3.11-slim \
             sh -lc 'pip -q install cookiecutter==2.6.0 >/dev/null && python -m cookiecutter "$@"' \
@@ -85,33 +89,46 @@ mkdir -p "${TEST_DIR}" 2>/dev/null || true
 mkdir -p ~/docker-test 2>/dev/null || true
 
 echo "[2/14] Generating cookiecutter templates..."
-cd "${BASE_DIR}"
-cookiecutter_run charts/ --no-input charts_dir=test-charts --output-dir "${TEST_DIR}" --overwrite-if-exists
-cookiecutter_run deploy/ --no-input deploy_dir=test-deploy --output-dir "${TEST_DIR}" --overwrite-if-exists
-cookiecutter_run application/ --no-input application_dir=test-applications --output-dir "${TEST_DIR}" --overwrite-if-exists
+cd "${REPO_ROOT}"
 
-echo "[3/14] Skipping shared-lib copy (now using OCI registry: ghcr.io/olissao1616/helm)..."
-# No longer needed - ag-helm-templates is pulled from GHCR automatically
-# cp -r "${BASE_DIR}/shared-lib" "${TEST_DIR}/"
-
-echo "[3b/14] Copying GitHub workflows into generated chart repo..."
-if [ -d "${BASE_DIR}/.github/workflows" ]; then
-    mkdir -p "${TEST_DIR}/test-charts/.github/workflows" 2>/dev/null || true
-    # Make test-output/test-charts look like a standalone repo for inspection.
-    # The real workflows live at repo root; cookiecutter charts/ output is intentionally minimal.
-    cp -r "${BASE_DIR}/.github/workflows/." "${TEST_DIR}/test-charts/.github/workflows/" 2>/dev/null || true
-else
-    echo "WARNING: ${BASE_DIR}/.github/workflows not found; skipping workflow copy"
+if [ ! -d "${REPO_ROOT}/gitops-repo" ]; then
+    echo "✗ FAILED: gitops-repo template directory not found at: ${REPO_ROOT}/gitops-repo"
+    exit 1
 fi
 
-echo "[4/14] Updating Helm dependencies..."
-cd "${TEST_DIR}/test-charts/gitops"
-helm dependency update
+cookiecutter_run gitops-repo/ --no-input \
+    app_name=test-app \
+    licence_plate=abc123 \
+    github_org=bcgov-c \
+    --output-dir "${TEST_DIR}" --overwrite-if-exists
 
-echo "[5/14] Rendering Helm templates..."
-helm template test-app . --values ../../test-deploy/dev_values.yaml --namespace myapp-dev > ../../rendered-dev.yaml
-LINE_COUNT=$(wc -l < ../../rendered-dev.yaml)
-echo "✓ Generated ${LINE_COUNT} lines of manifests"
+if [ ! -d "${TEST_DIR}/test-app-gitops" ]; then
+    echo "✗ FAILED: Cookiecutter output folder was not created: ${TEST_DIR}/test-app-gitops"
+    exit 1
+fi
+
+echo "[3/14] Skipping shared-lib copy (ag-helm-templates pulled from OCI registry by default)..."
+
+echo "[4/14] Updating Helm dependencies..."
+cd "${TEST_DIR}/test-app-gitops/charts/gitops"
+helm dependency update || {
+    echo "✗ FAILED: helm dependency update"
+    exit 1
+}
+
+echo "[5/14] Rendering Helm templates (dev/test/prod)..."
+for ENV in dev test prod; do
+    helm template test-app . \
+        --values "../../deploy/${ENV}_values.yaml" \
+        --namespace "abc123-${ENV}" \
+        > "../../../rendered-${ENV}.yaml"
+    if [ ! -s "../../../rendered-${ENV}.yaml" ]; then
+        echo "✗ FAILED: Render produced empty output for ${ENV}"
+        exit 1
+    fi
+    LINE_COUNT=$(wc -l < "../../../rendered-${ENV}.yaml")
+    echo "✓ ${ENV}: Generated ${LINE_COUNT} lines of manifests"
+done
 echo ""
 
 cd "${TEST_DIR}"
@@ -257,95 +274,95 @@ echo "========================================="
 echo ""
 
 # Track results
-CONFTEST_RESULT="UNKNOWN"
-KUBELINTER_RESULT="UNKNOWN"
-POLARIS_RESULT="UNKNOWN"
-NETPOL_RESULT="UNKNOWN"
-DATACLASS_RESULT="UNKNOWN"
-DATACLASS_VAL_RESULT="UNKNOWN"
+FAILED_FLAG=0
+SUMMARY_FILE="${TEST_DIR}/validation-summary.txt"
+: > "${SUMMARY_FILE}"
 KUBESEC_RESULT="UNKNOWN"
 TRIVY_RESULT="UNKNOWN"
 CHECKOV_RESULT="UNKNOWN"
 KUBESCORE_RESULT="UNKNOWN"
 DOCKER_TOOLS="UNKNOWN"
 
-echo "[7/14] Running Conftest (OPA)..."
+echo "[7/14] Running policy tools (dev/test/prod)..."
 echo "-----------------------------------------"
-if [ "${DEBUG_CONFTEST:-}" = "1" ]; then
-    echo "Conftest binary: $(pwd)/conftest.exe"
-    ./conftest.exe --version || true
-    echo "Conftest policy dir: $(pwd)/test-charts/policy"
-    if [ -d test-charts/policy ]; then
-        echo "Policy files:"
-        ls -la test-charts/policy || true
-        if command -v sha256sum >/dev/null 2>&1; then
-            echo "Policy SHA256:"
-            sha256sum test-charts/policy/*.rego 2>/dev/null || true
-        elif command -v shasum >/dev/null 2>&1; then
-            echo "Policy SHA256:"
-            shasum -a 256 test-charts/policy/*.rego 2>/dev/null || true
-        fi
+
+for ENV in dev test prod; do
+    echo "========================================="
+    echo "ENV: ${ENV}"
+    echo "========================================="
+    echo "ENV: ${ENV}" >> "${SUMMARY_FILE}"
+
+    if ./conftest.exe test "rendered-${ENV}.yaml" --policy "${BASE_DIR}/policies" --all-namespaces --output table; then
+        echo "PASSED: Conftest (${ENV})"
+        echo "Conftest (${ENV}): PASSED" >> "${SUMMARY_FILE}"
     else
-        echo "WARNING: test-charts/policy directory not found"
+        echo "FAILED: Conftest (${ENV})"
+        echo "Conftest (${ENV}): FAILED" >> "${SUMMARY_FILE}"
+        FAILED_FLAG=1
     fi
+    echo "" >> "${SUMMARY_FILE}"
     echo ""
-fi
-if ./conftest.exe test rendered-dev.yaml --policy test-charts/policy --all-namespaces --output table; then
-    echo "PASSED: Conftest validation"
-    CONFTEST_RESULT="PASSED"
-else
-    echo "FAILED: Conftest validation failed"
-    CONFTEST_RESULT="FAILED"
-fi
-echo ""
 
-echo "[8/14] Running kube-linter..."
-echo "-----------------------------------------"
-if ./kube-linter.exe lint rendered-dev.yaml --config test-charts/.kube-linter.yaml; then
-    echo "PASSED: kube-linter validation"
-    KUBELINTER_RESULT="PASSED"
-else
-    echo "WARNINGS: kube-linter found issues"
-    KUBELINTER_RESULT="WARNINGS"
-fi
-echo ""
+    if ./kube-linter.exe lint "rendered-${ENV}.yaml" --config "${BASE_DIR}/policies/kube-linter.yaml"; then
+        echo "PASSED: kube-linter (${ENV})"
+        echo "kube-linter (${ENV}): PASSED" >> "${SUMMARY_FILE}"
+    else
+        echo "WARNINGS: kube-linter (${ENV})"
+        echo "kube-linter (${ENV}): WARNINGS" >> "${SUMMARY_FILE}"
+    fi
+    echo "" >> "${SUMMARY_FILE}"
+    echo ""
 
-echo "[10/10] Running Network Policy Checks..."
-echo "-----------------------------------------"
-NP_COUNT=$(grep -c "kind: NetworkPolicy" rendered-dev.yaml || echo "0")
-DEPLOY_COUNT=$(grep -c "kind: Deployment" rendered-dev.yaml || echo "0")
-DATACLASS_COUNT=$(grep -c "DataClass:" rendered-dev.yaml || echo "0")
+    if ./polaris.exe audit --audit-path "rendered-${ENV}.yaml" --config "${BASE_DIR}/policies/polaris.yaml" --format pretty --set-exit-code-below-score 100; then
+        echo "PASSED: Polaris (${ENV})"
+        echo "Polaris (${ENV}): PASSED" >> "${SUMMARY_FILE}"
+    else
+        echo "FAILED: Polaris (${ENV})"
+        echo "Polaris (${ENV}): FAILED" >> "${SUMMARY_FILE}"
+        FAILED_FLAG=1
+    fi
+    echo "" >> "${SUMMARY_FILE}"
+    echo ""
 
-echo "NetworkPolicies found: ${NP_COUNT}"
-echo "Deployments found: ${DEPLOY_COUNT}"
+    echo "Running Network Policy Checks (${ENV})..."
+    NP_COUNT=$(grep -c "kind: NetworkPolicy" "rendered-${ENV}.yaml" || echo "0")
+    DEPLOY_COUNT=$(grep -c "kind: Deployment" "rendered-${ENV}.yaml" || echo "0")
+    DATACLASS_COUNT=$(grep -c "DataClass:" "rendered-${ENV}.yaml" || echo "0")
+    echo "NetworkPolicies found: ${NP_COUNT}"
+    echo "Deployments found: ${DEPLOY_COUNT}"
 
-if [ "${NP_COUNT}" -ge "${DEPLOY_COUNT}" ]; then
-    echo "PASSED: NetworkPolicy coverage adequate"
-    NETPOL_RESULT="PASSED"
-else
-    echo "FAILED: Insufficient NetworkPolicies (${NP_COUNT}) for Deployments (${DEPLOY_COUNT})"
-    NETPOL_RESULT="FAILED"
-fi
+    if [ "${NP_COUNT}" -ge "${DEPLOY_COUNT}" ]; then
+        echo "PASSED: NetworkPolicy coverage (${ENV})"
+        echo "NetworkPolicy coverage (${ENV}): PASSED" >> "${SUMMARY_FILE}"
+    else
+        echo "FAILED: NetworkPolicy coverage (${ENV})"
+        echo "NetworkPolicy coverage (${ENV}): FAILED" >> "${SUMMARY_FILE}"
+        FAILED_FLAG=1
+    fi
 
-echo "DataClass labels found: ${DATACLASS_COUNT}"
+    echo "DataClass labels found: ${DATACLASS_COUNT}"
+    if [ "${DATACLASS_COUNT}" -ge "${DEPLOY_COUNT}" ]; then
+        echo "PASSED: DataClass labels (${ENV})"
+        echo "DataClass labels (${ENV}): PASSED" >> "${SUMMARY_FILE}"
+    else
+        echo "FAILED: DataClass labels (${ENV})"
+        echo "DataClass labels (${ENV}): FAILED" >> "${SUMMARY_FILE}"
+        FAILED_FLAG=1
+    fi
 
-if [ "${DATACLASS_COUNT}" -ge "${DEPLOY_COUNT}" ]; then
-    echo "PASSED: DataClass labels present"
-    DATACLASS_RESULT="PASSED"
-else
-    echo "FAILED: Missing DataClass labels"
-    DATACLASS_RESULT="FAILED"
-fi
+    INVALID=$(grep "DataClass:" "rendered-${ENV}.yaml" | grep -v "Low" | grep -v "Medium" | grep -v "High" || echo "")
+    if [ -z "$INVALID" ]; then
+        echo "PASSED: DataClass values (${ENV})"
+        echo "DataClass values (${ENV}): PASSED" >> "${SUMMARY_FILE}"
+    else
+        echo "FAILED: DataClass values (${ENV})"
+        echo "DataClass values (${ENV}): FAILED" >> "${SUMMARY_FILE}"
+        FAILED_FLAG=1
+    fi
 
-INVALID=$(grep "DataClass:" rendered-dev.yaml | grep -v "Low" | grep -v "Medium" | grep -v "High" || echo "")
-if [ -z "$INVALID" ]; then
-    echo "PASSED: All DataClass values valid (Low/Medium/High)"
-    DATACLASS_VAL_RESULT="PASSED"
-else
-    echo "FAILED: Invalid DataClass values found"
-    DATACLASS_VAL_RESULT="FAILED"
-fi
-echo ""
+    echo "" >> "${SUMMARY_FILE}"
+    echo ""
+done
 
 echo "========================================="
 echo "DOCKER-BASED TOOLS (requires Docker)"
@@ -436,27 +453,12 @@ else
     echo ""
 fi
 
-echo "[9/10] Running Polaris..."
-echo "-----------------------------------------"
-if ./polaris.exe audit --audit-path rendered-dev.yaml --config test-charts/.polaris.yaml --format pretty --set-exit-code-below-score 100; then
-    echo "PASSED: Polaris validation"
-    POLARIS_RESULT="PASSED"
-else
-    echo "FAILED: Polaris score below 100"
-    POLARIS_RESULT="FAILED"
-fi
-echo ""
-
 echo ""
 echo "========================================="
 echo "VALIDATION SUMMARY"
 echo "========================================="
-echo "Conftest (OPA):        ${CONFTEST_RESULT}"
-echo "kube-linter:           ${KUBELINTER_RESULT}"
-echo "Polaris:               ${POLARIS_RESULT}"
-echo "NetworkPolicy Count:   ${NETPOL_RESULT}"
-echo "DataClass Labels:      ${DATACLASS_RESULT}"
-echo "DataClass Values:      ${DATACLASS_VAL_RESULT}"
+echo "Per-environment results: ${SUMMARY_FILE}"
+cat "${SUMMARY_FILE}" || true
 echo "Docker Tools:          ${DOCKER_TOOLS}"
 if [ "${DOCKER_TOOLS}" != "SKIPPED" ]; then
     echo "  Kubesec:           ${KUBESEC_RESULT}"
@@ -467,19 +469,17 @@ fi
 
 # Calculate overall result
 OVERALL_RESULT="PASSED"
-if [ "${CONFTEST_RESULT}" != "PASSED" ]; then OVERALL_RESULT="FAILED"; fi
-if [ "${KUBELINTER_RESULT}" != "PASSED" ]; then OVERALL_RESULT="FAILED"; fi
-if [ "${POLARIS_RESULT}" != "PASSED" ]; then OVERALL_RESULT="FAILED"; fi
-if [ "${NETPOL_RESULT}" != "PASSED" ]; then OVERALL_RESULT="FAILED"; fi
-if [ "${DATACLASS_RESULT}" != "PASSED" ]; then OVERALL_RESULT="FAILED"; fi
-if [ "${DATACLASS_VAL_RESULT}" != "PASSED" ]; then OVERALL_RESULT="FAILED"; fi
+if [ "${FAILED_FLAG}" = "1" ]; then OVERALL_RESULT="FAILED"; fi
 if [ "${DOCKER_TOOLS}" = "FAILED" ]; then OVERALL_RESULT="FAILED"; fi
 
 echo "Overall:               ${OVERALL_RESULT}"
 echo "========================================="
 echo ""
 echo "Test results saved in: ${TEST_DIR}"
-echo "Rendered manifests: ${TEST_DIR}/rendered-dev.yaml"
+echo "Rendered manifests:"
+echo "  ${TEST_DIR}/rendered-dev.yaml"
+echo "  ${TEST_DIR}/rendered-test.yaml"
+echo "  ${TEST_DIR}/rendered-prod.yaml"
 echo ""
 
 echo "========================================="

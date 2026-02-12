@@ -31,38 +31,23 @@ Before using this template, ensure you have:
 git clone <template-repo-url>
 cd ministry-gitops-jag-template-main
 
-# Generate charts
-cd charts
-cookiecutter . --no-input \
+# Generate a GitOps repo (includes charts + deploy values + Argo CD)
+cookiecutter ./gitops-repo --no-input \
   app_name=myapp \
   licence_plate=abc123 \
-  charts_dir=myapp-charts
-
-# Generate deployment configurations
-cd ../deploy
-cookiecutter . --no-input \
-  app_name=myapp \
-  licence_plate=abc123 \
-  deploy_dir=myapp-deploy \
-  team_name=myteam \
-  project_name=myproject
+  github_org=bcgov-c
 ```
 
 ### 2. Set Up Dependencies
 
-The generated chart depends on the **ag-helm shared library**. Copy it to the expected location:
-
-```bash
-mkdir -p /tmp/shared-lib
-cp -r shared-lib/ag-helm /tmp/shared-lib/
-```
+The generated chart depends on the **ag-helm shared library** via an OCI registry dependency (default in `charts/gitops/Chart.yaml`).
 
 ### 3. Configure Your Application
 
 Edit the generated values files to match your application:
 
 **For Development:**
-Edit `/tmp/myapp-deploy/dev_values.yaml`:
+Edit `myapp-gitops/deploy/dev_values.yaml`:
 
 ```yaml
 frontend:
@@ -83,7 +68,7 @@ backend:
 ### 4. Deploy to Your Environment
 
 ```bash
-cd /tmp/myapp-charts/gitops
+cd myapp-gitops/charts/gitops
 
 # Update Helm dependencies
 helm dependency update

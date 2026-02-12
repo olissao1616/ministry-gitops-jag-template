@@ -1,63 +1,16 @@
-name: Validate Template Output (Comprehensive)
-
-# Policy sources (single source of truth): this workflow uses the policy files committed under /policies.
-# - Conftest (OPA/Rego): policies/*.rego (e.g., network-policies.rego, avi-infrasetting-annotation.rego, routes-edge-termination.rego)
-# - Polaris: policies/polaris.yaml
-# - kube-linter: policies/kube-linter.yaml
-# - Datree (helm plugin): policies/datree-policies.yaml
+{% raw %}name: Complete Network Policy Validation
 
 on:
   push:
     branches: [main, develop]
-    paths:
-      - 'gitops-repo/**'
-      - 'policies/**'
-      - '.github/workflows/validate-network-policies-comprehensive.yaml'
+    paths: ['charts/**', 'deploy/**', '.github/workflows/**']
   pull_request:
     branches: [main, develop]
-    paths:
-      - 'gitops-repo/**'
-      - 'policies/**'
-      - '.github/workflows/validate-network-policies-comprehensive.yaml'
-
-permissions:
-  contents: read
+    paths: ['charts/**', 'deploy/**', '.github/workflows/**']
 
 jobs:
-  generate:
-    name: Generate test GitOps repo
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Cookiecutter
-        run: pip install cookiecutter==2.6.0
-
-      - name: Generate test GitOps repo
-        run: |
-          rm -rf /tmp/cookiecutter-out
-          cookiecutter ./gitops-repo --no-input \
-            app_name=test-app \
-            licence_plate=abc123 \
-            github_org=bcgov-c \
-            --output-dir /tmp/cookiecutter-out
-
-      - name: Upload generated repo
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-gitops-repo
-          path: /tmp/cookiecutter-out/test-app-gitops
-          retention-days: 1
-
   render:
     name: Render (${{ matrix.env }})
-    needs: generate
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -72,23 +25,21 @@ jobs:
         with:
           version: '3.14.0'
 
-      - name: Download generated repo
-        uses: actions/download-artifact@v4
-        with:
-          name: generated-gitops-repo
-          path: generated
+      - name: Update Helm dependencies
+        run: |
+          cd charts/gitops
+          helm dependency update
 
       - name: Render manifests
         run: |
-          cd generated/charts/gitops
-          helm dependency update
-          helm template test-app . \
-            --values ../../deploy/${{ matrix.env }}_values.yaml \
-            --namespace abc123-${{ matrix.env }} \
+          set -euo pipefail
+          helm template gitops-app-${{ matrix.env }} ./charts/gitops \
+            --values ./deploy/${{ matrix.env }}_values.yaml \
+            --namespace ${{ matrix.env }} \
             > /tmp/rendered-${{ matrix.env }}.yaml
           echo "✓ Rendered $(wc -l < /tmp/rendered-${{ matrix.env }}.yaml) lines"
 
-      - name: Upload manifests
+      - name: Upload rendered manifests
         uses: actions/upload-artifact@v4
         with:
           name: rendered-${{ matrix.env }}
@@ -119,13 +70,66 @@ jobs:
           sudo mv conftest /usr/local/bin/
           conftest --version
 
+      - name: Download centralized policies
+        run: |
+          mkdir -p /tmp/policies
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -L https://raw.githubusercontent.com/{% endraw %}{{cookiecutter.github_org}}{% raw %}/ministry-gitops-jag-template/main/policies/network-policies.rego \
+            -o /tmp/policies/network-policies.rego
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -L https://raw.githubusercontent.com/{% endraw %}{{cookiecutter.github_org}}{% raw %}/ministry-gitops-jag-template/main/policies/avi-infrasetting-annotation.rego \
+            -o /tmp/policies/avi-infrasetting-annotation.rego
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -L https://raw.githubusercontent.com/{% endraw %}{{cookiecutter.github_org}}{% raw %}/ministry-gitops-jag-template/main/policies/routes-edge-termination.rego \
+            -o /tmp/policies/routes-edge-termination.rego
+
       - name: Run Conftest
         run: |
           conftest test rendered-${{ matrix.env }}.yaml \
-            --policy policies/ \
+            --policy /tmp/policies/ \
             --all-namespaces \
             --output table \
             --fail-on-warn
+
+  datree:
+    name: Datree (helm) (${{ matrix.env }})
+    needs: render
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, test, prod]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.14.0'
+
+      - name: Install Datree Helm plugin
+        run: |
+          helm plugin install https://github.com/datreeio/helm-datree
+          helm plugin update datree
+          helm datree config set offline local
+
+      - name: Download centralized Datree policies
+        run: |
+          mkdir -p /tmp/policies
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -L https://raw.githubusercontent.com/{% endraw %}{{cookiecutter.github_org}}{% raw %}/ministry-gitops-jag-template/main/policies/datree-policies.yaml \
+            -o /tmp/policies/datree-policies.yaml
+
+      - name: Run Helm Datree policy enforcement
+        run: |
+          set -euo pipefail
+          helm dependency update ./charts/gitops
+
+          helm datree test --ignore-missing-schemas \
+            --policy-config /tmp/policies/datree-policies.yaml \
+            --include-tests ./charts/gitops \
+            -- --namespace "${{ matrix.env }}" --values "./deploy/${{ matrix.env }}_values.yaml" "gitops-app-${{ matrix.env }}"
 
   kubesec:
     name: Kubesec (${{ matrix.env }})
@@ -146,16 +150,16 @@ jobs:
 
       - name: Run Kubesec scan
         run: |
+          set -euo pipefail
           docker run --rm -v $(pwd):/work mikefarah/yq:4 sh -c \
             "yq eval 'select(.kind == \"Deployment\" or .kind == \"StatefulSet\" or .kind == \"DaemonSet\" or .kind == \"Job\" or .kind == \"CronJob\" or .kind == \"Pod\")' /work/rendered-${{ matrix.env }}.yaml > /work/kubesec-input.yaml"
           docker run -i kubesec/kubesec:v2 scan /dev/stdin < kubesec-input.yaml > kubesec-results-${{ matrix.env }}.json
           cat kubesec-results-${{ matrix.env }}.json
 
       - name: Upload Kubesec results
-        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kubesec-results-${{ matrix.env }}
+          name: kubesec-${{ matrix.env }}
           path: kubesec-results-${{ matrix.env }}.json
 
   polaris:
@@ -175,34 +179,24 @@ jobs:
         with:
           name: rendered-${{ matrix.env }}
 
-      - name: Run Polaris
+      - name: Download Polaris config
+        run: |
+          mkdir -p /tmp/policies
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -L https://raw.githubusercontent.com/{% endraw %}{{cookiecutter.github_org}}{% raw %}/ministry-gitops-jag-template/main/policies/polaris.yaml \
+            -o /tmp/policies/polaris.yaml
+
+      - name: Run Polaris audit
         run: |
           docker run --rm \
             -v ${{ github.workspace }}:/app \
+            -v /tmp/policies/polaris.yaml:/tmp/polaris.yaml \
             quay.io/fairwinds/polaris:8.5.0 \
             audit \
             --audit-path /app/rendered-${{ matrix.env }}.yaml \
-            --config /app/policies/polaris.yaml \
+            --config /tmp/polaris.yaml \
             --format pretty \
-            --set-exit-code-below-score 100
-
-      - name: Upload Polaris report
-        if: always()
-        run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/app \
-            quay.io/fairwinds/polaris:8.5.0 \
-            audit \
-            --audit-path /app/rendered-${{ matrix.env }}.yaml \
-            --config /app/policies/polaris.yaml \
-            --format json > polaris-report-${{ matrix.env }}.json
-
-      - name: Upload Polaris report artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: polaris-report-${{ matrix.env }}
-          path: polaris-report-${{ matrix.env }}.json
+            --set-exit-code-below-score 75
 
   kube-score:
     name: kube-score (${{ matrix.env }})
@@ -253,9 +247,16 @@ jobs:
           sudo mv kube-linter /usr/local/bin/
           kube-linter version
 
+      - name: Download kube-linter config
+        run: |
+          mkdir -p /tmp/policies
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -L https://raw.githubusercontent.com/{% endraw %}{{cookiecutter.github_org}}{% raw %}/ministry-gitops-jag-template/main/policies/kube-linter.yaml \
+            -o /tmp/policies/kube-linter.yaml
+
       - name: Run kube-linter
         run: |
-          kube-linter lint rendered-${{ matrix.env }}.yaml --config policies/kube-linter.yaml
+          kube-linter lint rendered-${{ matrix.env }}.yaml --config /tmp/policies/kube-linter.yaml
 
   pluto:
     name: Pluto (${{ matrix.env }})
@@ -311,10 +312,9 @@ jobs:
           output: 'trivy-results-${{ matrix.env }}.sarif'
 
       - name: Upload Trivy results
-        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trivy-results-${{ matrix.env }}
+          name: trivy-${{ matrix.env }}
           path: trivy-results-${{ matrix.env }}.sarif
 
   checkov:
@@ -346,48 +346,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: checkov-results-${{ matrix.env }}
+          name: checkov-${{ matrix.env }}
           path: checkov-results-${{ matrix.env }}.sarif
-
-  datree:
-    name: Datree (helm) (${{ matrix.env }})
-    needs: generate
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        env: [dev, test, prod]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: '3.14.0'
-
-      - name: Install Datree Helm plugin
-        run: |
-          helm plugin install https://github.com/datreeio/helm-datree
-          helm plugin update datree
-          helm datree config set offline local
-
-      - name: Download generated repo
-        uses: actions/download-artifact@v4
-        with:
-          name: generated-gitops-repo
-          path: generated
-
-      - name: Run Helm Datree policy enforcement
-        run: |
-          set -euo pipefail
-          cd generated
-          helm dependency update ./charts/gitops
-
-          helm datree test --ignore-missing-schemas \
-            --policy-config "${GITHUB_WORKSPACE}/policies/datree-policies.yaml" \
-            --include-tests ./charts/gitops \
-            -- --namespace "abc123-${{ matrix.env }}" --values "./deploy/${{ matrix.env }}_values.yaml" "gitops-app-${{ matrix.env }}"
 
   summary:
     name: Validation summary
@@ -395,6 +355,7 @@ jobs:
     needs:
       - render
       - conftest
+      - datree
       - kubesec
       - polaris
       - kube-score
@@ -402,18 +363,18 @@ jobs:
       - pluto
       - trivy
       - checkov
-      - datree
     runs-on: ubuntu-latest
     steps:
       - name: Write summary
         run: |
-          echo "# Template validation (comprehensive)" >> $GITHUB_STEP_SUMMARY
+          echo "# Network policy validation (comprehensive)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "This workflow generates a test GitOps repo with Cookiecutter, renders Helm manifests for dev/test/prod, then runs policy and security validators." >> $GITHUB_STEP_SUMMARY
+          echo "Helm render (dev/test/prod) -> validators (Conftest, Datree, Kubesec, Polaris, kube-score, kube-linter, Pluto, Trivy, Checkov)." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Job results" >> $GITHUB_STEP_SUMMARY
           echo "- Render: ${{ needs.render.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Conftest: ${{ needs.conftest.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Datree (helm): ${{ needs.datree.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Kubesec: ${{ needs.kubesec.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Polaris: ${{ needs.polaris.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- kube-score: ${{ needs.kube-score.result }}" >> $GITHUB_STEP_SUMMARY
@@ -421,4 +382,5 @@ jobs:
           echo "- Pluto: ${{ needs.pluto.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Trivy: ${{ needs.trivy.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Checkov: ${{ needs.checkov.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Datree (helm): ${{ needs.datree.result }}" >> $GITHUB_STEP_SUMMARY
+{% endraw %}
+

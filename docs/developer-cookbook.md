@@ -46,36 +46,21 @@ This script generates output under `test-output/` and produces a `test-output/re
 
 From the template repository:
 
-1) Generate chart templates:
+1) Generate the repo:
 
 ```bash
-cd charts
-cookiecutter . --no-input \
+cookiecutter ./gitops-repo --no-input \
   app_name=myapp \
   licence_plate=abc123 \
-  charts_dir=myapp-charts
+  github_org=bcgov-c
 ```
 
-2) Generate deploy values:
+2) Render and inspect:
 
 ```bash
-cd ../deploy
-cookiecutter . --no-input \
-  app_name=myapp \
-  licence_plate=abc123 \
-  deploy_dir=myapp-deploy \
-  team_name=myteam \
-  project_name=myproject
-```
-
-3) Render and inspect:
-
-```bash
-cd ../myapp-charts/gitops
-mkdir -p /tmp/shared-lib
-cp -r ../../shared-lib/ag-helm /tmp/shared-lib/
+cd myapp-gitops/charts/gitops
 helm dependency update
-helm template myapp . --values ../../myapp-deploy/dev_values.yaml --namespace abc123-dev > rendered.yaml
+helm template myapp . --values ../../deploy/dev_values.yaml --namespace abc123-dev > rendered.yaml
 ```
 
 ## How the repo is intended to be used
@@ -191,14 +176,11 @@ When something doesn’t work, debug by rendering locally with the exact same va
 From the generated GitOps repo root:
 
 ```bash
-mkdir -p /tmp/shared-lib
-cp -r shared-lib/ag-helm /tmp/shared-lib/
-
-cd charts/*/gitops
+cd charts/gitops
 helm dependency update
 
 helm template myapp . \
-  --values ../../../deploy/*/dev_values.yaml \
+  --values ../../deploy/dev_values.yaml \
   --namespace abc123-dev \
   > /tmp/rendered.yaml
 ```
@@ -240,8 +222,8 @@ backend:
 2) Render locally (same values file) and sanity-check:
 
 ```bash
-cd charts/*/gitops
-helm template myapp . --values ../../../deploy/*/dev_values.yaml --namespace abc123-dev > /tmp/rendered.yaml
+cd charts/gitops
+helm template myapp . --values ../../deploy/dev_values.yaml --namespace abc123-dev > /tmp/rendered.yaml
 ```
 
 3) Commit to `develop` (dev) and let Argo sync.

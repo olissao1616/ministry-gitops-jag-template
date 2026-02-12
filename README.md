@@ -46,26 +46,16 @@ This validates the complete workflow: generation, deployment, and verification.
 git clone <template-repo-url>
 cd ministry-gitops-jag-template-main
 
-# Generate charts
-cd charts
-cookiecutter . --no-input \
+# Generate a GitOps repo (includes charts + deploy values + Argo CD)
+cookiecutter ./gitops-repo --no-input \
   app_name=myapp \
   licence_plate=abc123 \
-  charts_dir=myapp-charts
-
-# Generate deployment configurations
-cd ../deploy
-cookiecutter . --no-input \
-  app_name=myapp \
-  licence_plate=abc123 \
-  deploy_dir=myapp-deploy \
-  team_name=myteam \
-  project_name=myproject
+  github_org=bcgov-c
 ```
 
 ### Configure Your Application
 
-Edit the generated values file (`myapp-deploy/dev_values.yaml`):
+Edit the generated values file (`myapp-gitops/deploy/dev_values.yaml`):
 
 ```yaml
 frontend:

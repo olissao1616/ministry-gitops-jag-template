@@ -99,9 +99,8 @@ Check packages at: https://github.com/olissao1616?tab=packages
 ### 3. Test Generated Chart
 Generate a test chart and verify it pulls from GHCR:
 ```bash
-cd charts
-cookiecutter . --no-input app_name=testapp licence_plate=test01 charts_dir=test-charts
-cd test-charts/gitops
+cookiecutter ./gitops-repo --no-input app_name=testapp licence_plate=test01 github_org=bcgov-c
+cd testapp-gitops/charts/gitops
 helm dependency update
 # Should download ag-helm-templates from GHCR
 ls charts/

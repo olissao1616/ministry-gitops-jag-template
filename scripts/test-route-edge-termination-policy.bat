@@ -81,7 +81,7 @@ echo conftest.exe not found.
 echo Expected at either:
 echo   - "%ROOT%\conftest.exe"
 echo   - "%ROOT%\test-output\conftest.exe"
-echo Run test-all-validations.bat/.sh to populate test-output with tools.
+echo Run scripts\\test-all-validations.bat or scripts/test-all-validations.sh to populate test-output with tools.
 exit /b 2
 
 :unexpected_pass

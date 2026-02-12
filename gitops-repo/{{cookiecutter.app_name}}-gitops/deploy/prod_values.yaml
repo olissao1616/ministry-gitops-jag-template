@@ -2,16 +2,30 @@
 
 # Global labels (used by PriorityClass/PDBs and common templates)
 project: "{{cookiecutter.project_name}}"
-environment: test
-env: test
+environment: prod
+env: prod
 owner: "{{cookiecutter.team_name}}"
+
+# Common annotations applied to workloads (used by kube-linter required-annotation-email)
+commonAnnotations:
+  email: "{{cookiecutter.team_name}}@gov.bc.ca"
+
+# Ensure PriorityClass exists for workloads (Polaris priorityClassNotSet)
+priorityClass:
+  create: true
+  name: "{{cookiecutter.app_name}}-normal"
+  value: 1000
+  globalDefault: false
+  description: "Default application priority"
+
+# Normal Postgres DB instance
 postgresql:
   enabled: false
   image:
     pullPolicy: Always
   commonLabels:
-    environment: test
-    env: test
+    environment: prod
+    env: prod
     owner: "{{cookiecutter.team_name}}"
     project: "{{cookiecutter.project_name}}"
     DataClass: "Medium"
@@ -23,14 +37,14 @@ postgresql:
     networkPolicy:
       enabled: false
     labels:
-      environment: test
-      env: test
+      environment: prod
+      env: prod
       owner: "{{cookiecutter.team_name}}"
       project: "{{cookiecutter.project_name}}"
       DataClass: "Medium"
     podLabels:
-      environment: test
-      env: test
+      environment: prod
+      env: prod
       owner: "{{cookiecutter.team_name}}"
       project: "{{cookiecutter.project_name}}"
       DataClass: "Medium"
@@ -53,7 +67,6 @@ postgresql:
     database: appdb
   image:
     pullPolicy: Always
-    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000" # Example only; replace with real digest
   primary:
     podSecurityContext:
       enabled: false
@@ -94,42 +107,41 @@ postgresql:
           ('user2', 'user2@example.com')
           ON CONFLICT (username) DO NOTHING;
   commonLabels:
-    environment: test
-    env: test
+    environment: prod
+    env: prod
     owner: "{{cookiecutter.team_name}}"
     project: "{{cookiecutter.project_name}}"
     DataClass: "Medium"
     app.kubernetes.io/part-of: "{{cookiecutter.project_name}}"
   commonAnnotations:
     datree.skip/CUSTOM_WORKLOAD_INCORRECT_NETWORKS: "skipping this policy"
-    email: "{{cookiecutter.team_name}}@gov.bc.ca"
 
 telnet:
   enabled: true
-  goldService: "sso-e27db1-dev.apps.gold.devops.gov.bc.ca" # testing connectivity from emerald to a service GOLD using telnet
+  goldService: "sso-e27db1-dev.apps.gold.devops.gov.bc.ca" # tetsing connectivity from emerald to a service GOLD using telnet
   goldPort: 80
-  diamSSO: test.common-sso.justice.gov.bc.ca # testing outbound to DIAM Common-SSO
+  diamSSO: common-sso.justice.gov.bc.ca # testing outbound to DIAM Common-SSO
   diamPort: 80
-  diamEgressIP: 142.34.51.102/32
-  justinEgressIP: 142.34.47.201/32 # JUSTIN test IP
+  diamEgressIP: 142.34.208.118/32 # PROD DIAM IP
+  justinEgressIP: 142.34.47.201/32 # JUSTIN PROD IP
   publicService: "https://docker.io" # testing connectivity from emerald to internet via web proxy using curl
   gitHubUrl: "https://github.com/bcgov/JAG-GITOPS-TEMPLATE.git" # test connectivity outbound to github via git clone
   commonLabels:
-    environment: test
-    env: test
+    environment: prod
+    env: prod
     owner: "{{cookiecutter.team_name}}"
     project: "{{cookiecutter.project_name}}"
     DataClass: "Medium"
     app.kubernetes.io/part-of: "{{cookiecutter.project_name}}"
 
-#  React Client-side rendering using NextJS Framework
 frontend:
   enabled: true
-  environment: test
-  env: test
+  environment: prod
+  env: prod
   owner: "{{cookiecutter.team_name}}"
   project: "{{cookiecutter.project_name}}"
   part: "{{cookiecutter.project_name}}"
+  replicaCount: 2
   keycloak:
     authUrl: https://sso-e27db1-dev.apps.gold.devops.gov.bc.ca/auth
     realm: ISB
@@ -137,20 +149,21 @@ frontend:
   apiUrl: "{{cookiecutter.app_name}}-webapi-core:8080"
   podLabels:
     DataClass: "Medium"
+  priorityClassName: "{{cookiecutter.app_name}}-normal"
   route:
-    host: react-baseapp-{{cookiecutter.licence_plate}}-test.apps.emerald.devops.gov.bc.ca
+    host: react-baseapp-{{cookiecutter.licence_plate}}-prod.apps.emerald.devops.gov.bc.ca
     annotations:
       aviinfrasetting.ako.vmware.com/name: "dataclass-medium"
-  priorityClassName: "{{cookiecutter.app_name}}-normal"
 
 backend:
   enabled: true
-  environment: test
+  environment: prod
   app_name: "{{cookiecutter.app_name}}"
-  env: test
+  env: prod
   owner: "{{cookiecutter.team_name}}"
   project: "{{cookiecutter.project_name}}"
   part: "{{cookiecutter.project_name}}"
+  replicaCount: 2
   keycloak:
     realmUrl: https://sso-e27db1-dev.apps.gold.devops.gov.bc.ca/auth/realms/ISB
     adminClientId: WEB-API

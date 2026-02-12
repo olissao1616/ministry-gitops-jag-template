@@ -1,12 +1,32 @@
 @echo off
 setlocal enabledelayedexpansion
 
+REM This script is a LOCAL validation harness. It is not a GitHub Actions workflow.
+REM (GitHub Actions uses .github/workflows/*.yaml)
+
+REM Default to non-interactive mode unless explicitly overridden.
+if not defined NO_PAUSE set "NO_PAUSE=1"
+
 echo =========================================
 echo NETWORK POLICY VALIDATION TEST SUITE
 echo =========================================
 echo.
 
-set "BASE_DIR=%~dp0"
+REM Resolve repo root so this script can run from repo root OR from scripts/.
+set "SCRIPT_DIR=%~dp0"
+set "REPO_ROOT="
+if exist "%SCRIPT_DIR%gitops-repo\cookiecutter.json" (
+    for %%I in ("%SCRIPT_DIR%.") do set "REPO_ROOT=%%~fI"
+) else if exist "%SCRIPT_DIR%..\gitops-repo\cookiecutter.json" (
+    for %%I in ("%SCRIPT_DIR%..") do set "REPO_ROOT=%%~fI"
+) else (
+    echo ERROR: Could not locate gitops-repo\cookiecutter.json relative to %SCRIPT_DIR%
+    echo Expected one of:
+    echo   %SCRIPT_DIR%gitops-repo\cookiecutter.json
+    echo   %SCRIPT_DIR%..\gitops-repo\cookiecutter.json
+    exit /b 1
+)
+set "BASE_DIR=%REPO_ROOT%\"
 REM Allow override: set TEST_OUTPUT_DIR=test-output-alt
 if defined TEST_OUTPUT_DIR (
     set "TEST_DIR=!BASE_DIR!!TEST_OUTPUT_DIR!"
@@ -25,7 +45,7 @@ if exist "!TEST_DIR!" (
 mkdir "!TEST_DIR!"
 
 echo [2/10] Generating cookiecutter templates...
-cd "%BASE_DIR%"
+cd /d "%REPO_ROOT%"
 
 REM Prefer cookiecutter.exe if available; otherwise fall back to Python launcher.
 set CC_CMD=cookiecutter
@@ -45,56 +65,36 @@ if errorlevel 1 (
     )
 )
 
-call %CC_CMD% charts/ --no-input charts_dir=test-charts --output-dir "!TEST_DIR!" --overwrite-if-exists
+call %CC_CMD% "%REPO_ROOT%\gitops-repo" --no-input app_name=test-app licence_plate=abc123 github_org=bcgov-c --output-dir "!TEST_DIR!" --overwrite-if-exists
 if errorlevel 1 (
-    echo ERROR: Cookiecutter charts generation failed
+    echo ERROR: Cookiecutter gitops-repo generation failed
     exit /b 1
-)
-
-call %CC_CMD% deploy/ --no-input deploy_dir=test-deploy --output-dir "!TEST_DIR!" --overwrite-if-exists
-if errorlevel 1 (
-    echo ERROR: Cookiecutter deploy generation failed
-    exit /b 1
-)
-
-call %CC_CMD% application/ --no-input application_dir=test-applications --output-dir "!TEST_DIR!" --overwrite-if-exists
-if errorlevel 1 (
-    echo ERROR: Cookiecutter application generation failed
-    exit /b 1
-)
-
-echo [3/10] Copying shared-lib dependency...
-xcopy /s /e /i /q "%BASE_DIR%shared-lib" "!TEST_DIR!\shared-lib"
-
-echo [3b/10] Copying GitHub workflows into generated chart repo...
-set "WORKFLOW_SRC=!BASE_DIR!.github\workflows"
-set "WORKFLOW_DST=!TEST_DIR!\test-charts\.github\workflows"
-if exist "!WORKFLOW_SRC!" (
-    if not exist "!WORKFLOW_DST!" mkdir "!WORKFLOW_DST!" >nul 2>&1
-    xcopy /s /e /i /q "!WORKFLOW_SRC!" "!WORKFLOW_DST!" >nul 2>&1
-) else (
-    echo WARNING: GitHub workflows folder not found; skipping workflow copy
 )
 
 echo [4/10] Updating Helm dependencies...
-cd "!TEST_DIR!\test-charts\gitops"
+cd "!TEST_DIR!\test-app-gitops\charts\gitops"
 helm dependency update
 if errorlevel 1 (
     echo ERROR: Helm dependency update failed
     exit /b 1
 )
 
-echo [5/10] Rendering Helm templates...
+echo [5/10] Rendering Helm templates (dev/test/prod)...
 REM Render with an explicit namespace so policy tools don't treat resources as 'default'.
-helm template test-app . --values ..\..\test-deploy\dev_values.yaml --namespace myapp-dev > ..\..\rendered-dev.yaml
-if errorlevel 1 (
-    echo ERROR: Helm template rendering failed
-    exit /b 1
+for %%E in (dev test prod) do (
+    echo Rendering manifests for %%E...
+    helm template test-app . --values ..\..\deploy\%%E_values.yaml --namespace abc123-%%E > ..\..\..\rendered-%%E.yaml
+    if errorlevel 1 (
+        echo ERROR: Helm template rendering failed for %%E
+        exit /b 1
+    )
 )
 
 cd "!TEST_DIR!"
-for /f %%a in ('find /c /v "" ^< rendered-dev.yaml') do set LINE_COUNT=%%a
-echo Generated %LINE_COUNT% lines of manifests
+for %%E in (dev test prod) do (
+    for /f %%a in ('find /c /v "" ^< rendered-%%E.yaml') do set LINE_COUNT=%%a
+    echo rendered-%%E.yaml: !LINE_COUNT! lines
+)
 echo.
 
 echo [6/10] Downloading validation tools...
@@ -147,81 +147,101 @@ echo.
 
 echo [7/10] Running Conftest (OPA)...
 echo -----------------------------------------
-conftest.exe test rendered-dev.yaml --policy test-charts\policy --all-namespaces --output table
-if errorlevel 1 (
-    echo FAILED: Conftest validation failed
-    set CONFTEST_RESULT=FAILED
-) else (
-    echo PASSED: Conftest validation
-    set CONFTEST_RESULT=PASSED
+set "FAILED_FLAG=0"
+set "SUMMARY_FILE=!TEST_DIR!\validation-summary.txt"
+echo Validation Summary > "!SUMMARY_FILE!"
+echo.>> "!SUMMARY_FILE!"
+
+for %%E in (dev test prod) do (
+    echo =========================================
+    echo ENV: %%E
+    echo =========================================
+    echo ENV: %%E>> "!SUMMARY_FILE!"
+
+    conftest.exe test rendered-%%E.yaml --policy "%BASE_DIR%policies" --all-namespaces --output table
+    if errorlevel 1 (
+        echo FAILED: Conftest ^(%%E^)
+        echo Conftest ^(%%E^): FAILED>> "!SUMMARY_FILE!"
+        set "FAILED_FLAG=1"
+    ) else (
+        echo PASSED: Conftest ^(%%E^)
+        echo Conftest ^(%%E^): PASSED>> "!SUMMARY_FILE!"
+    )
+    echo.
+
+    kube-linter.exe lint rendered-%%E.yaml --config "%BASE_DIR%policies\kube-linter.yaml"
+    if errorlevel 1 (
+        echo WARNINGS: kube-linter ^(%%E^)
+        echo kube-linter ^(%%E^): WARNINGS>> "!SUMMARY_FILE!"
+    ) else (
+        echo PASSED: kube-linter ^(%%E^)
+        echo kube-linter ^(%%E^): PASSED>> "!SUMMARY_FILE!"
+    )
+    echo.
+
+    polaris.exe audit --audit-path rendered-%%E.yaml --config "%BASE_DIR%policies\polaris.yaml" --format pretty --set-exit-code-below-score 100
+    if errorlevel 1 (
+        echo FAILED: Polaris ^(%%E^)
+        echo Polaris ^(%%E^): FAILED>> "!SUMMARY_FILE!"
+        set "FAILED_FLAG=1"
+    ) else (
+        echo PASSED: Polaris ^(%%E^)
+        echo Polaris ^(%%E^): PASSED>> "!SUMMARY_FILE!"
+    )
+    echo.
+
+    echo Running Network Policy Checks ^(%%E^)...
+
+    REM Count NetworkPolicies
+    for /f "delims=" %%a in ('findstr /c:"kind: NetworkPolicy" rendered-%%E.yaml ^| find /c /v ""') do set NP_COUNT=%%a
+    echo NetworkPolicies found: !NP_COUNT!
+
+    REM Count Deployments
+    for /f "delims=" %%a in ('findstr /c:"kind: Deployment" rendered-%%E.yaml ^| find /c /v ""') do set DEPLOY_COUNT=%%a
+    echo Deployments found: !DEPLOY_COUNT!
+
+    if !NP_COUNT! LSS !DEPLOY_COUNT! (
+        echo FAILED: NetworkPolicy coverage ^(%%E^)
+        echo NetworkPolicy coverage ^(%%E^): FAILED>> "!SUMMARY_FILE!"
+        set "FAILED_FLAG=1"
+    ) else (
+        echo PASSED: NetworkPolicy coverage ^(%%E^)
+        echo NetworkPolicy coverage ^(%%E^): PASSED>> "!SUMMARY_FILE!"
+    )
+
+    REM Count DataClass labels
+    for /f "delims=" %%a in ('findstr /c:"DataClass:" rendered-%%E.yaml ^| find /c /v ""') do set DATACLASS_COUNT=%%a
+    echo DataClass labels found: !DATACLASS_COUNT!
+
+    if !DATACLASS_COUNT! LSS !DEPLOY_COUNT! (
+        echo FAILED: DataClass labels ^(%%E^)
+        echo DataClass labels ^(%%E^): FAILED>> "!SUMMARY_FILE!"
+        set "FAILED_FLAG=1"
+    ) else (
+        echo PASSED: DataClass labels ^(%%E^)
+        echo DataClass labels ^(%%E^): PASSED>> "!SUMMARY_FILE!"
+    )
+
+    REM Validate DataClass values
+    findstr /c:"DataClass:" rendered-%%E.yaml | findstr /v /c:"Low" /v /c:"Medium" /v /c:"High" > nul
+    if errorlevel 1 (
+        echo PASSED: DataClass values ^(%%E^)
+        echo DataClass values ^(%%E^): PASSED>> "!SUMMARY_FILE!"
+    ) else (
+        echo FAILED: DataClass values ^(%%E^)
+        echo DataClass values ^(%%E^): FAILED>> "!SUMMARY_FILE!"
+        set "FAILED_FLAG=1"
+    )
+    echo.>> "!SUMMARY_FILE!"
+    echo.
 )
-echo.
 
-echo [8/10] Running kube-linter...
-echo -----------------------------------------
-kube-linter.exe lint rendered-dev.yaml --config test-charts\.kube-linter.yaml
-if errorlevel 1 (
-    echo WARNINGS: kube-linter found issues
-    set KUBELINTER_RESULT=WARNINGS
-) else (
-    echo PASSED: kube-linter validation
-    set KUBELINTER_RESULT=PASSED
-)
-echo.
-
-echo [9/10] Running Polaris...
-echo -----------------------------------------
-polaris.exe audit --audit-path rendered-dev.yaml --config test-charts\.polaris.yaml --format pretty --set-exit-code-below-score 100
-if errorlevel 1 (
-    echo FAILED: Polaris score below 100
-    set POLARIS_RESULT=FAILED
-) else (
-    echo PASSED: Polaris validation
-    set POLARIS_RESULT=PASSED
-)
-echo.
-
-echo [10/10] Running Network Policy Checks...
-echo -----------------------------------------
-
-REM Count NetworkPolicies
-for /f "delims=" %%a in ('findstr /c:"kind: NetworkPolicy" rendered-dev.yaml ^| find /c /v ""') do set NP_COUNT=%%a
-echo NetworkPolicies found: %NP_COUNT%
-
-REM Count Deployments
-for /f "delims=" %%a in ('findstr /c:"kind: Deployment" rendered-dev.yaml ^| find /c /v ""') do set DEPLOY_COUNT=%%a
-echo Deployments found: %DEPLOY_COUNT%
-
-if %NP_COUNT% LSS %DEPLOY_COUNT% (
-    echo FAILED: Insufficient NetworkPolicies ^(%NP_COUNT%^) for Deployments ^(%DEPLOY_COUNT%^)
-    set NETPOL_RESULT=FAILED
-) else (
-    echo PASSED: NetworkPolicy coverage adequate
-    set NETPOL_RESULT=PASSED
-)
-
-REM Count DataClass labels
-for /f "delims=" %%a in ('findstr /c:"DataClass:" rendered-dev.yaml ^| find /c /v ""') do set DATACLASS_COUNT=%%a
-echo DataClass labels found: %DATACLASS_COUNT%
-
-if %DATACLASS_COUNT% LSS %DEPLOY_COUNT% (
-    echo FAILED: Missing DataClass labels
-    set DATACLASS_RESULT=FAILED
-) else (
-    echo PASSED: DataClass labels present
-    set DATACLASS_RESULT=PASSED
-)
-
-REM Validate DataClass values
-findstr /c:"DataClass:" rendered-dev.yaml | findstr /v /c:"Low" /v /c:"Medium" /v /c:"High" > nul
-if errorlevel 1 (
-    echo PASSED: All DataClass values valid ^(Low/Medium/High^)
-    set DATACLASS_VAL_RESULT=PASSED
-) else (
-    echo FAILED: Invalid DataClass values found
-    set DATACLASS_VAL_RESULT=FAILED
-)
-echo.
+set CONFTEST_RESULT=SEE_SUMMARY
+set KUBELINTER_RESULT=SEE_SUMMARY
+set POLARIS_RESULT=SEE_SUMMARY
+set NETPOL_RESULT=SEE_SUMMARY
+set DATACLASS_RESULT=SEE_SUMMARY
+set DATACLASS_VAL_RESULT=SEE_SUMMARY
 
 echo =========================================
 echo DOCKER-BASED TOOLS ^(requires Docker^)
@@ -302,12 +322,8 @@ echo.
 echo =========================================
 echo VALIDATION SUMMARY
 echo =========================================
-echo Conftest (OPA):        %CONFTEST_RESULT%
-echo kube-linter:           %KUBELINTER_RESULT%
-echo Polaris:               %POLARIS_RESULT%
-echo NetworkPolicy Count:   %NETPOL_RESULT%
-echo DataClass Labels:      %DATACLASS_RESULT%
-echo DataClass Values:      %DATACLASS_VAL_RESULT%
+echo Per-environment results: %TEST_DIR%\validation-summary.txt
+type "%TEST_DIR%\validation-summary.txt"
 echo Docker Tools:          %DOCKER_TOOLS%
 if not "%DOCKER_TOOLS%"=="SKIPPED" (
     echo   Kubesec:           %KUBESEC_RESULT%
@@ -317,18 +333,16 @@ if not "%DOCKER_TOOLS%"=="SKIPPED" (
 )
 
 set OVERALL_RESULT=PASSED
-if /i not "%CONFTEST_RESULT%"=="PASSED" set OVERALL_RESULT=FAILED
-if /i not "%KUBELINTER_RESULT%"=="PASSED" set OVERALL_RESULT=FAILED
-if /i not "%POLARIS_RESULT%"=="PASSED" set OVERALL_RESULT=FAILED
-if /i not "%NETPOL_RESULT%"=="PASSED" set OVERALL_RESULT=FAILED
-if /i not "%DATACLASS_RESULT%"=="PASSED" set OVERALL_RESULT=FAILED
-if /i not "%DATACLASS_VAL_RESULT%"=="PASSED" set OVERALL_RESULT=FAILED
+if "%FAILED_FLAG%"=="1" set OVERALL_RESULT=FAILED
 if /i "%DOCKER_TOOLS%"=="FAILED" set OVERALL_RESULT=FAILED
 echo Overall:               %OVERALL_RESULT%
 echo =========================================
 echo.
 echo Test results saved in: %TEST_DIR%
-echo Rendered manifests: %TEST_DIR%\rendered-dev.yaml
+echo Rendered manifests:
+echo   %TEST_DIR%\rendered-dev.yaml
+echo   %TEST_DIR%\rendered-test.yaml
+echo   %TEST_DIR%\rendered-prod.yaml
 echo.
 
 REM Check for Helm Datree plugin

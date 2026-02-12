@@ -1,0 +1,21 @@
+# Ignore Helm dependency charts
+charts/*/charts/
+*.tgz
+
+# Helm lock files
+*.lock
+
+# Test outputs
+test-output/
+rendered-*.yaml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
