@@ -39,6 +39,11 @@ jobs:
           helm plugin update datree
           helm datree config set offline local
 
+      - name: Update Helm dependencies
+        run: |
+          set -euo pipefail
+          helm dependency update ./charts/gitops
+
       - name: Download centralized Datree policies
         run: |
           mkdir -p /tmp/policies
