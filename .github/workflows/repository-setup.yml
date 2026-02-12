@@ -91,11 +91,6 @@ jobs:
           rm -rf ./cookiecutter-temp/
           shopt -u dotglob
 
-      - name: Clean up template folders
-        shell: bash
-        run: |
-          rm -rf charts/ deploy/ application/ appcode/ gitops-repo/ rbac/ workflow/ shared-lib/
-
       - name: Update Helm dependencies
         run: |
           helm dependency update ./charts/gitops
