@@ -37,6 +37,10 @@ jobs:
             conventional-changelog-conventionalcommits
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The action installs JS tooling with npm; disable audit/fund output here.
+          # This does not affect your chart/repo security posture; it just avoids upstream noise.
+          NPM_CONFIG_AUDIT: "false"
+          NPM_CONFIG_FUND: "false"
 
       - name: Setup Helm
         if: steps.semrel.outputs.new_release_published == 'true'
