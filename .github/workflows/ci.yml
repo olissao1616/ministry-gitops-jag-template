@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,7 +33,7 @@ jobs:
           helm lint ./shared-lib/ag-helm
       
       - name: Helm login to GHCR
-        run: echo "${{ secrets.GHCR_PAT }}" | helm registry login ghcr.io -u gha-sa --password-stdin
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
 
 
       - name: Build dependencies for example-app
