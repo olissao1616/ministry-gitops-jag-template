@@ -1,0 +1,406 @@
+name: Complete Network Policy Validation
+
+on:
+  push:
+    branches: [main, develop]
+    paths: ['charts/**', 'deploy/**', '.github/workflows/**']
+  pull_request:
+    branches: [main, develop]
+    paths: ['charts/**', 'deploy/**', '.github/workflows/**']
+
+permissions:
+  contents: read
+
+env:
+  POLICY_SOURCE_ORG: ${{ vars.POLICY_SOURCE_ORG || github.repository_owner }}
+  POLICY_SOURCE_REPO: ministry-gitops-jag-template
+
+jobs:
+  render:
+    if: ${{ github.repository != 'bcgov-c/ministry-gitops-jag-template' }}
+    name: Render (${{ matrix.env }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, test, prod]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.14.0'
+
+      - name: Update Helm dependencies
+        run: |
+          cd charts/gitops
+          helm dependency update
+
+      - name: Render manifests
+        run: |
+          set -euo pipefail
+          helm template gitops-app-${{ matrix.env }} ./charts/gitops \
+            --values ./deploy/${{ matrix.env }}_values.yaml \
+            --namespace ${{ matrix.env }} \
+            > /tmp/rendered-${{ matrix.env }}.yaml
+          echo "✓ Rendered $(wc -l < /tmp/rendered-${{ matrix.env }}.yaml) lines"
+
+      - name: Upload rendered manifests
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-${{ matrix.env }}
+          path: /tmp/rendered-${{ matrix.env }}.yaml
+          retention-days: 7
+
+  conftest:
+    if: ${{ github.repository != 'bcgov-c/ministry-gitops-jag-template' }}
+    name: Conftest (${{ matrix.env }})
+    needs: render
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, test, prod]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-${{ matrix.env }}
+
+      - name: Install Conftest
+        run: |
+          wget -q https://github.com/open-policy-agent/conftest/releases/download/v0.49.1/conftest_0.49.1_Linux_x86_64.tar.gz
+          tar xzf conftest_0.49.1_Linux_x86_64.tar.gz
+          sudo mv conftest /usr/local/bin/
+          conftest --version
+
+      - name: Download centralized policies
+        run: |
+          mkdir -p /tmp/policies
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -L "https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/main/policies/network-policies.rego" \
+            -o /tmp/policies/network-policies.rego
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -L "https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/main/policies/avi-infrasetting-annotation.rego" \
+            -o /tmp/policies/avi-infrasetting-annotation.rego
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -L "https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/main/policies/routes-edge-termination.rego" \
+            -o /tmp/policies/routes-edge-termination.rego
+
+      - name: Run Conftest
+        run: |
+          conftest test rendered-${{ matrix.env }}.yaml \
+            --policy /tmp/policies/ \
+            --all-namespaces \
+            --output table \
+            --fail-on-warn
+
+  datree:
+    if: ${{ github.repository != 'bcgov-c/ministry-gitops-jag-template' }}
+    name: Datree (helm) (${{ matrix.env }})
+    needs: render
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, test, prod]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.14.0'
+
+      - name: Install Datree Helm plugin
+        run: |
+          helm plugin install https://github.com/datreeio/helm-datree
+          helm plugin update datree
+          helm datree config set offline local
+
+      - name: Verify Datree plugin
+        run: |
+          set -euo pipefail
+          helm plugin list
+          helm datree --help
+
+      - name: Download centralized Datree policies
+        run: |
+          mkdir -p /tmp/policies
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -L "https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/main/policies/datree-policies.yaml" \
+            -o /tmp/policies/datree-policies.yaml
+
+      - name: Run Helm Datree policy enforcement
+        run: |
+          set -euo pipefail
+          helm dependency update ./charts/gitops
+
+          helm datree test --ignore-missing-schemas \
+            --policy-config /tmp/policies/datree-policies.yaml \
+            --include-tests ./charts/gitops \
+            -- --namespace "${{ matrix.env }}" --values "./deploy/${{ matrix.env }}_values.yaml" "gitops-app-${{ matrix.env }}"
+
+  kubesec:
+    if: ${{ github.repository != 'bcgov-c/ministry-gitops-jag-template' }}
+    name: Kubesec (${{ matrix.env }})
+    needs: render
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, test, prod]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-${{ matrix.env }}
+
+      - name: Run Kubesec scan
+        run: |
+          set -euo pipefail
+          docker run --rm -v ${{ github.workspace }}:/work mikefarah/yq:4 \
+            eval 'select(.kind == "Deployment" or .kind == "StatefulSet" or .kind == "DaemonSet" or .kind == "Job" or .kind == "CronJob" or .kind == "Pod")' \
+            /work/rendered-${{ matrix.env }}.yaml > kubesec-input.yaml
+          docker run -i kubesec/kubesec:v2 scan /dev/stdin < kubesec-input.yaml > kubesec-results-${{ matrix.env }}.json
+          cat kubesec-results-${{ matrix.env }}.json
+
+      - name: Upload Kubesec results
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubesec-${{ matrix.env }}
+          path: kubesec-results-${{ matrix.env }}.json
+
+  polaris:
+    if: ${{ github.repository != 'bcgov-c/ministry-gitops-jag-template' }}
+    name: Polaris (${{ matrix.env }})
+    needs: render
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, test, prod]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-${{ matrix.env }}
+
+      - name: Download Polaris config
+        run: |
+          mkdir -p /tmp/policies
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -L "https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/main/policies/polaris.yaml" \
+            -o /tmp/policies/polaris.yaml
+
+      - name: Run Polaris audit
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/app \
+            -v /tmp/policies/polaris.yaml:/tmp/polaris.yaml \
+            quay.io/fairwinds/polaris:8.5.0 \
+            polaris audit \
+            --audit-path /app/rendered-${{ matrix.env }}.yaml \
+            --config /tmp/polaris.yaml \
+            --format pretty \
+            --set-exit-code-below-score 75
+
+  kube-score:
+    if: ${{ github.repository != 'bcgov-c/ministry-gitops-jag-template' }}
+    name: kube-score (${{ matrix.env }})
+    needs: render
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, test, prod]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-${{ matrix.env }}
+
+      - name: Run kube-score
+        run: |
+          docker run --rm -v $(pwd):/project \
+            zegl/kube-score:latest score \
+            /project/rendered-${{ matrix.env }}.yaml \
+            --output-format ci \
+            --ignore-test pod-networkpolicy
+
+  kube-linter:
+    name: kube-linter (${{ matrix.env }})
+    needs: render
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, test, prod]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-${{ matrix.env }}
+
+      - name: Install kube-linter
+        run: |
+          wget -q https://github.com/stackrox/kube-linter/releases/download/v0.6.8/kube-linter-linux.tar.gz
+          tar -xzf kube-linter-linux.tar.gz
+          sudo mv kube-linter /usr/local/bin/
+          kube-linter version
+
+      - name: Download kube-linter config
+        run: |
+          mkdir -p /tmp/policies
+          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -L "https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/main/policies/kube-linter.yaml" \
+            -o /tmp/policies/kube-linter.yaml
+
+      - name: Run kube-linter
+        run: |
+          kube-linter lint rendered-${{ matrix.env }}.yaml --config /tmp/policies/kube-linter.yaml
+
+  pluto:
+    name: Pluto (${{ matrix.env }})
+    needs: render
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, test, prod]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-${{ matrix.env }}
+
+      - name: Download Pluto
+        uses: FairwindsOps/pluto/github-action@v5.22.7
+        with:
+          IMAGE_TAG: v5
+          CONTAINER_ENGINE: docker
+
+      - name: Run Pluto scan
+        run: |
+          set -euo pipefail
+          pluto detect rendered-${{ matrix.env }}.yaml --target-versions k8s=v1.28.0
+
+  trivy:
+    name: Trivy (${{ matrix.env }})
+    needs: render
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, test, prod]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-${{ matrix.env }}
+
+      - name: Run Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: 'rendered-${{ matrix.env }}.yaml'
+          format: 'sarif'
+          output: 'trivy-results-${{ matrix.env }}.sarif'
+
+      - name: Upload Trivy results
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ matrix.env }}
+          path: trivy-results-${{ matrix.env }}.sarif
+
+  checkov:
+    name: Checkov (${{ matrix.env }})
+    needs: render
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [dev, test, prod]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-${{ matrix.env }}
+
+      - name: Run Checkov scan
+        uses: bridgecrewio/checkov-action@master
+        with:
+          file: rendered-${{ matrix.env }}.yaml
+          framework: kubernetes
+          skip_check: CKV_K8S_43
+          output_format: cli,sarif
+          output_file_path: console,checkov-results-${{ matrix.env }}.sarif
+
+      - name: Upload Checkov results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-${{ matrix.env }}
+          path: checkov-results-${{ matrix.env }}.sarif
+
+  summary:
+    name: Validation summary
+    if: always()
+    needs:
+      - render
+      - conftest
+      - datree
+      - kubesec
+      - polaris
+      - kube-score
+      - kube-linter
+      - pluto
+      - trivy
+      - checkov
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write summary
+        run: |
+          echo "# Network policy validation (comprehensive)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Helm render (dev/test/prod) -> validators (Conftest, Datree, Kubesec, Polaris, kube-score, kube-linter, Pluto, Trivy, Checkov)." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Job results" >> $GITHUB_STEP_SUMMARY
+          echo "- Render: ${{ needs.render.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Conftest: ${{ needs.conftest.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Datree (helm): ${{ needs.datree.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Kubesec: ${{ needs.kubesec.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Polaris: ${{ needs.polaris.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- kube-score: ${{ needs.kube-score.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- kube-linter: ${{ needs.kube-linter.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Pluto: ${{ needs.pluto.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Trivy: ${{ needs.trivy.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Checkov: ${{ needs.checkov.result }}" >> $GITHUB_STEP_SUMMARY
+
