@@ -146,8 +146,9 @@ jobs:
 
       - name: Run Kubesec scan
         run: |
-          docker run --rm -v $(pwd):/work mikefarah/yq:4 sh -c \
-            "yq eval 'select(.kind == \"Deployment\" or .kind == \"StatefulSet\" or .kind == \"DaemonSet\" or .kind == \"Job\" or .kind == \"CronJob\" or .kind == \"Pod\")' /work/rendered-${{ matrix.env }}.yaml > /work/kubesec-input.yaml"
+          docker run --rm -v ${{ github.workspace }}:/work mikefarah/yq:4 \
+            eval 'select(.kind == "Deployment" or .kind == "StatefulSet" or .kind == "DaemonSet" or .kind == "Job" or .kind == "CronJob" or .kind == "Pod")' \
+            /work/rendered-${{ matrix.env }}.yaml > kubesec-input.yaml
           docker run -i kubesec/kubesec:v2 scan /dev/stdin < kubesec-input.yaml > kubesec-results-${{ matrix.env }}.json
           cat kubesec-results-${{ matrix.env }}.json
 
