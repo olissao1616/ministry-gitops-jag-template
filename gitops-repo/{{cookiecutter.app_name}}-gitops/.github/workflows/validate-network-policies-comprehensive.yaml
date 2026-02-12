@@ -192,7 +192,7 @@ jobs:
             -v ${{ github.workspace }}:/app \
             -v /tmp/policies/polaris.yaml:/tmp/polaris.yaml \
             quay.io/fairwinds/polaris:8.5.0 \
-            audit \
+            polaris audit \
             --audit-path /app/rendered-${{ matrix.env }}.yaml \
             --config /tmp/polaris.yaml \
             --format pretty \
