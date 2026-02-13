@@ -233,7 +233,14 @@ jobs:
           IGNORE_ARGS="--ignore-test pod-networkpolicy"
           # OpenShift clusters use SCC-assigned, namespace-specific UIDs. Only ignore kube-score's
           # UID/GID heuristic when the values file explicitly sets global.openshift: true.
-          if awk 'BEGIN{in_global=0} /^[^[:space:]]/{in_global=($0 ~ /^global:[[:space:]]*$/)} { if(in_global && $0 ~ /^[[:space:]]+openshift:[[:space:]]*true[[:space:]]*$/) exit 0 } END{ exit 1 }' "values-${{ matrix.env }}.yaml"; then
+          VALUES_FILE="values-${{ matrix.env }}.yaml"
+          if [ ! -f "$VALUES_FILE" ]; then
+            echo "ERROR: Missing $VALUES_FILE (expected in rendered-${{ matrix.env }} artifact)"
+            ls -la
+            exit 1
+          fi
+
+          if awk 'NR==1{sub(/^\357\273\277/, "", $0)} /^[^[:space:]]/{in_global=($0 ~ /^global:[[:space:]]*$/)} { if(in_global && $0 ~ /^[[:space:]]+openshift:[[:space:]]*true[[:space:]]*$/) exit 0 } END{ exit 1 }' "$VALUES_FILE"; then
             echo "OpenShift mode detected via values-${{ matrix.env }}.yaml (global.openshift: true) - ignoring: container-security-context-user-group-id"
             IGNORE_ARGS="$IGNORE_ARGS --ignore-test container-security-context-user-group-id"
           fi
