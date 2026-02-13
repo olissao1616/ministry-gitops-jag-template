@@ -17,6 +17,12 @@ Params similar to ag-template.deployment, plus:
 {{- end -}}
 {{- end -}}
 {{- $dc := (include "ag-template.getDataClass" $p) -}}
+{{- /* Determine OpenShift mode: read global.openshift from chart values */ -}}
+{{- $vals := $p.Values -}}
+{{- if and (kindIs "map" $p) (hasKey $p "Values") -}}
+{{- $vals = (get $p "Values") -}}
+{{- end -}}
+{{- $isOpenShift := (index (index $vals "global" | default dict) "openshift" | default false) -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -33,6 +39,10 @@ metadata:
 {{- if gt (len $labelData) 0 }}
 {{- toYaml $labelData | nindent 4 }}
 {{- end }}
+  {{- if $isOpenShift }}
+  annotations:
+    checkov.io/skip999: CKV_K8S_40=OpenShift SCC assigns runtime UID/GID; do not pin runAsUser/runAsGroup in manifests.
+  {{- end }}
 spec:
   replicas: {{ default 1 $mv.replicas }}
   serviceName: {{ required "ServiceName is required for StatefulSet" $p.ServiceName }}

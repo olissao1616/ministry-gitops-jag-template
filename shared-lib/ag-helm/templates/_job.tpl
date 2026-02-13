@@ -9,6 +9,12 @@
 {{- end -}}
 {{- end -}}
 {{- $dc := (include "ag-template.getDataClass" $p) -}}
+{{- /* Determine OpenShift mode: read global.openshift from chart values */ -}}
+{{- $vals := $p.Values -}}
+{{- if and (kindIs "map" $p) (hasKey $p "Values") -}}
+{{- $vals = (get $p "Values") -}}
+{{- end -}}
+{{- $isOpenShift := (index (index $vals "global" | default dict) "openshift" | default false) -}}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -28,6 +34,7 @@ metadata:
 {{- $hasTopAnn := false }}
 {{- if $p.AnnotationData }}{{ $hasTopAnn = true }}{{- end }}
 {{- if $p.Annotations }}{{ $hasTopAnn = true }}{{- end }}
+{{- if $isOpenShift }}{{ $hasTopAnn = true }}{{- end }}
 {{- if $hasTopAnn }}
   annotations:
   {{- if $p.AnnotationData }}
@@ -35,6 +42,9 @@ metadata:
   {{- end }}
   {{- if $p.Annotations }}
 {{ toYaml $p.Annotations | nindent 4 }}
+  {{- end }}
+  {{- if $isOpenShift }}
+    checkov.io/skip999: CKV_K8S_40=OpenShift SCC assigns runtime UID/GID; do not pin runAsUser/runAsGroup in manifests.
   {{- end }}
 {{- end }}
 spec:
