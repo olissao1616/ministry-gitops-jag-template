@@ -227,7 +227,6 @@ jobs:
           docker run --rm -v $(pwd):/project \
             zegl/kube-score:latest score \
             --output-format ci \
-            --ignore-test pod-networkpolicy \
             --ignore-test container-security-context-user-group-id \
             /project/rendered-${{ matrix.env }}.yaml
 
