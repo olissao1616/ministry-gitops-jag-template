@@ -282,7 +282,14 @@ echo.
 
 echo Running Checkov...
 echo -----------------------------------------
-docker run --rm -v "%cd%:/work" bridgecrew/checkov:latest -f /work/rendered-dev.yaml --framework kubernetes --compact --quiet
+set "CHECKOV_SKIP_ARGS="
+REM OpenShift mode uses SCC-assigned UIDs; skip runAsUser enforcement in Checkov.
+findstr /C:"openshift: true" "test-app-gitops\deploy\dev_values.yaml" >nul 2>&1
+if not errorlevel 1 (
+    set "CHECKOV_SKIP_ARGS=--skip-check CKV_K8S_40"
+    echo OpenShift mode detected for dev - skipping: CKV_K8S_40
+)
+docker run --rm -v "%cd%:/work" bridgecrew/checkov:latest -f /work/rendered-dev.yaml --framework kubernetes --compact --quiet !CHECKOV_SKIP_ARGS!
 if errorlevel 1 (
     echo FAILED: Checkov found issues
     set CHECKOV_RESULT=FAILED
@@ -294,13 +301,25 @@ echo.
 
 echo Running kube-score...
 echo -----------------------------------------
-docker run --rm -v "%cd%:/project" zegl/kube-score:latest score /project/rendered-dev.yaml --ignore-test pod-networkpolicy
-if errorlevel 1 (
-    echo FAILED: kube-score found issues
-    set KUBESCORE_RESULT=FAILED
-) else (
-    echo PASSED: kube-score
-    set KUBESCORE_RESULT=PASSED
+set "KUBESCORE_RESULT=PASSED"
+for %%E in (dev test prod) do (
+    set "KUBESCORE_IGNORE_ARGS="
+    REM Detect OpenShift mode from values (under global: openshift: true)
+    findstr /C:"openshift: true" "test-app-gitops\deploy\%%E_values.yaml" >nul 2>&1
+    if not errorlevel 1 (
+        set "KUBESCORE_IGNORE_ARGS=--ignore-test container-security-context-user-group-id"
+        echo OpenShift mode detected for %%E - ignoring: container-security-context-user-group-id
+    )
+
+    echo kube-score %%E...
+    docker run --rm -v "%cd%:/project" zegl/kube-score:latest score /project/rendered-%%E.yaml !KUBESCORE_IGNORE_ARGS!
+    if errorlevel 1 (
+        echo FAILED: kube-score found issues for %%E
+        set KUBESCORE_RESULT=FAILED
+    ) else (
+        echo PASSED: kube-score for %%E
+    )
+    echo.
 )
 echo.
 
@@ -356,11 +375,14 @@ echo.
 echo =========================================
 echo VALIDATION COMPLETE
 echo =========================================
+set "FINAL_EXIT=0"
 if /i "%OVERALL_RESULT%"=="FAILED" (
     echo.
     echo ERROR: One or more validations failed.
     if not defined NO_PAUSE pause
-    exit /b 1
+    set "FINAL_EXIT=1"
 ) else (
     if not defined NO_PAUSE pause
 )
+
+endlocal & exit /b %FINAL_EXIT%

@@ -10,7 +10,7 @@ policies:
       - identifier: CUSTOM_WORKLOAD_INCORRECT_NETWORK_POLICIES
         messageOnFailure: "Ensure Network Policies have distinct and clear source and target rules"
       - identifier: CUSTOM_WORKLOAD_INCORRECT_ENVIRONMENT_LABELS
-        messageOnFailure: "Use only approved environment labels (`prod`, `test` and `dev`)"
+        messageOnFailure: "Use only approved environment labels (`production`, `test` and `development`)"
       - identifier: CUSTOM_WORKLOAD_MISSING_LABEL_OWNER_VALUE
         messageOnFailure: "Add a proper owner label to know which person/team to ping when needed"
       - identifier: CUSTOM_WORKLOAD_INVALID_LABELS_VALUE
@@ -19,8 +19,6 @@ policies:
         messageOnFailure: Incorrect value for key `host` - specify host instead of using a wildcard character ("*")
       - identifier: CONTAINERS_MISSING_IMAGE_VALUE_VERSION
         messageOnFailure: Incorrect value for key `image` - specify an image version to avoid unpleasant "version surprises" in the future
-      - identifier: DEPLOYMENT_MISSING_LABEL_ENV_VALUE
-        messageOnFailure: 'Missing label object `env` - add a proper environment description (e.g. "prod", "test", etc.) to the Deployment config'
       - identifier: CONTAINERS_MISSING_CPU_REQUEST_KEY
         messageOnFailure: Missing property object `requests.cpu` - value should be within the accepted boundaries recommended by the organization
       - identifier: CRONJOB_INVALID_SCHEDULE_VALUE
@@ -194,7 +192,7 @@ customRules:
               - podSelector
   - identifier: CUSTOM_WORKLOAD_INCORRECT_ENVIRONMENT_LABELS
     name: Ensure correct environment labels are used [CUSTOM RULE]
-    defaultMessageOnFailure: Use only approved environment labels (`prod`, `dev` and `test`)
+    defaultMessageOnFailure: Use only approved environment labels (`production`, `development` and `test`)
     schema:
       properties:
         metadata:
@@ -203,8 +201,8 @@ customRules:
               properties:
                 environment:
                   enum:
-                    - prod
-                    - dev
+                    - production
+                    - development
                     - test
               required:
                 - environment

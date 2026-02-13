@@ -1,13 +1,59 @@
-# {{ cookiecutter.app_name }}-charts/values.yaml
-my_app_name: "{{ cookiecutter.app_name }}"
+# Chart defaults for the generated GitOps repo
+
+# Global labels/annotations (authoritative source)
+global:
+  project: &project "{{ cookiecutter.project_name }}"
+  owner: &owner "{{ cookiecutter.team_name }}"
+  environment: &environment development
+  openshift: true
+  commonAnnotations: &commonAnnotations
+    email: "{{cookiecutter.team_name}}@gov.bc.ca"
+
+# Backwards-compatible top-level aliases for existing templates.
+# (Lets us keep consuming templates unchanged while we migrate toward global.*)
+project: *project
+owner: *owner
+environment: *environment
+commonAnnotations: *commonAnnotations
+
+# Optional: create a PriorityClass for the workloads to use
+priorityClass:
+  create: true
+  name: "{{ cookiecutter.app_name }}-normal"
+  value: 1000
+  globalDefault: false
+  description: "Default application priority"
 
 postgresql:
   enabled: false
   auth:
     username: appuser
-    password: changeme
     database: appdb
+    existingSecret: ""
+    secretKeys:
+      adminPasswordKey: postgres-password
+      userPasswordKey: password
+    usePasswordFiles: true
+  image:
+    pullPolicy: Always
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
   primary:
+    networkPolicy:
+      enabled: false
+    priorityClassName: "{{ cookiecutter.app_name }}-normal"
+    podSecurityContext:
+      enabled: true
+      fsGroup: 10001
+    containerSecurityContext:
+      enabled: true
+      runAsNonRoot: true
+      runAsUser: 10001
+      runAsGroup: 10001
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
     persistence:
       enabled: true
       size: 256Mi
@@ -20,12 +66,13 @@ postgresql:
         cpu: 20m
         memory: 100Mi
         ephemeral-storage: 128Mi
+  readReplicas:
+    networkPolicy:
+      enabled: false
+    priorityClassName: "{{ cookiecutter.app_name }}-normal"
   commonAnnotations:
     {}
 
-# Global project settings
-project: "{{ cookiecutter.app_name }}"
-environment: dev
 
 # Keycloak/SSO configuration (shared by frontend and backend)
 keycloak:
@@ -43,14 +90,15 @@ database:
 
 # Frontend application (React/Next.js)
 frontend:
-  enabled: false
+  enabled: true
   image:
-    repository: sookeke/react-baseapp
+    repository: sookeke
+    name: react-baseapp
     tag: "nextjs"
-    digest: "" # Optional: sha256:... (overrides tag when set)
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000" # Example only; replace with real digest
     pullPolicy: Always
 
-  replicaCount: 1
+  replicaCount: 2
   dataClass: "medium"  # low, medium, or high
 
   service:
@@ -60,7 +108,8 @@ frontend:
   route:
     enabled: true
     host: frontend-{{cookiecutter.licence_plate}}-dev.apps.gold.devops.gov.bc.ca
-    annotations: {}
+    annotations:
+      aviinfrasetting.ako.vmware.com/name: dataclass-medium
 
   serviceAccount:
     create: true
@@ -68,7 +117,7 @@ frontend:
     annotations: {}
 
   # Optional: set a PriorityClass for this workload
-  priorityClassName: ""
+  priorityClassName: "{{ cookiecutter.app_name }}-normal"
 
   autoscaling:
     enabled: false
@@ -101,14 +150,15 @@ frontend:
 
 # Backend application (.NET API)
 backend:
-  enabled: false
+  enabled: true
   image:
-    repository: sookeke/web-api
+    repository: sookeke
+    name: web-api
     tag: "v2"
-    digest: "" # Optional: sha256:... (overrides tag when set)
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000" # Example only; replace with real digest
     pullPolicy: Always
 
-  replicaCount: 1
+  replicaCount: 2
   dataClass: "medium"  # low, medium, or high
 
   service:
@@ -132,7 +182,7 @@ backend:
     annotations: {}
 
   # Optional: set a PriorityClass for this workload
-  priorityClassName: ""
+  priorityClassName: "{{ cookiecutter.app_name }}-normal"
 
   autoscaling:
     enabled: false
@@ -163,10 +213,4 @@ backend:
   tolerations: []
   affinity: {}
 
-# Optional: create a PriorityClass for the workloads to use
-priorityClass:
-  create: false
-  name: "{{ cookiecutter.app_name }}-normal"
-  value: 1000
-  globalDefault: false
-  description: "Default application priority"
+

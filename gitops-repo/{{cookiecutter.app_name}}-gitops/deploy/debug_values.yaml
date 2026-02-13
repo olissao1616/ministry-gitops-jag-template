@@ -1,0 +1,17 @@
+telnet:
+  enabled: true
+  goldService: "sso-e27db1-dev.apps.gold.devops.gov.bc.ca" # tetsing connectivity from emerald to a service GOLD using telnet
+  goldPort: 80
+  diamSSO: dev.common-sso.justice.gov.bc.ca # testing outbound to DIAM Common-SSO
+  diamEgressIP: 142.34.102.72/32
+  diamPort: 80
+  justinEgressIP: 142.34.47.201/32 # JUSTIN DEV IP
+  publicService: "https://docker.io" # testing connectivity from emerald to internet via web proxy using curl
+  gitHubUrl: "https://github.com/bcgov/JAG-GITOPS-TEMPLATE.git" # test connectivity outbound to github via git clone
+  commonLabels:
+    environment: dev
+    env: dev
+    owner: "{{cookiecutter.team_name}}"
+    project: "{{cookiecutter.project_name}}"
+    DataClass: "Medium"
+    app.kubernetes.io/part-of: "{{cookiecutter.project_name}}"

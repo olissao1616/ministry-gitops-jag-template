@@ -97,9 +97,10 @@ readinessProbe:
 {{- with $mv.podLabels }}
 {{- toYaml . | nindent 0 }}
 {{- end }}
-{{- if $v.environment }}
-environment: {{ $v.environment }}
-env: {{ $v.env | default $v.environment }}
+{{- $global := (index $v "global" | default dict) -}}
+{{- $environment := (index $global "environment" | default $v.environment) -}}
+{{- if $environment }}
+environment: {{ $environment }}
 {{- end }}
 {{- if $v.owner }}
 owner: {{ $v.owner }}

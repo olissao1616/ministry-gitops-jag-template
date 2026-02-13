@@ -9,6 +9,14 @@ Params similar to ag-template.deployment, plus:
 {{- $p := . -}}
 {{- $mv := default (dict) $p.ModuleValues -}}
 {{- if not ($mv.disabled | default false) }}
+{{- $labelData := dict -}}
+{{- if $p.LabelData -}}
+{{- $tmp := (include $p.LabelData $p | fromYaml) -}}
+{{- if and (kindIs "map" $tmp) (not (hasKey $tmp "Error")) -}}
+{{- $labelData = $tmp -}}
+{{- end -}}
+{{- end -}}
+{{- $dc := (include "ag-template.getDataClass" $p) -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -22,10 +30,8 @@ metadata:
     app.kubernetes.io/name: {{ $p.Name }}
     app.kubernetes.io/part-of: {{ $p.ApplicationGroup }}
 {{ include "ag-template.commonLabels" $p | nindent 4 }}
-{{- if $p.LabelData }}
-{{- with (include $p.LabelData $p | fromYaml) }}
-{{- toYaml . | nindent 4 }}
-{{- end }}
+{{- if gt (len $labelData) 0 }}
+{{- toYaml $labelData | nindent 4 }}
 {{- end }}
 spec:
   replicas: {{ default 1 $mv.replicas }}
@@ -39,11 +45,11 @@ spec:
       labels:
         app.kubernetes.io/name: {{ $p.Name }}
         app.kubernetes.io/part-of: {{ $p.ApplicationGroup }}
-{{ include "ag-template.dataClassLabel" $p | nindent 8 }}
-{{- if $p.LabelData }}
-{{- with (include $p.LabelData $p | fromYaml) }}
-{{- toYaml . | nindent 8 }}
-{{- end }}
+        {{- if not (hasKey $labelData "DataClass") }}
+        DataClass: {{ title $dc }}
+        {{- end }}
+{{- if gt (len $labelData) 0 }}
+{{- toYaml $labelData | nindent 8 }}
 {{- end }}
     spec:
       terminationGracePeriodSeconds: {{ default 30 $mv.terminationGracePeriod }}

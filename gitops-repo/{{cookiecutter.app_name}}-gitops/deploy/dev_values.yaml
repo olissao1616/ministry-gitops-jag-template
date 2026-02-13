@@ -1,213 +1,53 @@
-# Global labels (used by PriorityClass/PDBs and common templates)
-project: "{{cookiecutter.project_name}}"
-environment: dev
-env: dev
-owner: "{{cookiecutter.team_name}}"
+global:
+  environment: development
+  openshift: true
 
-# PostgreSQL database
-# Production-ready pattern: reference an externally-managed Secret (avoid committing passwords)
+environment: development
+
+keycloak:
+  enabled: true
+  authUrl: https://sso-e27db1-dev.apps.gold.devops.gov.bc.ca/auth
+  realm: ISB
+  realmUrl: https://sso-e27db1-dev.apps.gold.devops.gov.bc.ca/auth/realms/ISB
+  clientId: react-baseapp
+  adminClientId: WEB-API
+  ClientId: WEB-API
+
 postgresql:
   enabled: true
-  fullnameOverride: "{{cookiecutter.app_name}}-postgresql"
   auth:
-    username: appuser
-    database: appdb
     existingSecret: "{{cookiecutter.app_name}}-postgresql-auth"
-    secretKeys:
-      adminPasswordKey: postgres-password
-      userPasswordKey: password
-    usePasswordFiles: true
-  image:
-    repository: postgres
-    tag: "16"
-    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000" # Example only; replace with real digest
-    pullPolicy: Always
+  # These are passed through to the Bitnami postgresql subchart so kube-linter
+  # can enforce ownership metadata on the StatefulSet.
+  commonLabels:
+    owner: "{{cookiecutter.team_name}}"
+  commonAnnotations:
+    email: "{{cookiecutter.team_name}}@gov.bc.ca"
   primary:
-    priorityClassName: "{{cookiecutter.app_name}}-normal"
-    topologySpreadConstraints:
-      - maxSkew: 1
-        topologyKey: kubernetes.io/hostname
-        whenUnsatisfiable: ScheduleAnyway
-        labelSelector:
-          matchLabels:
-            app.kubernetes.io/instance: "{{cookiecutter.app_name}}-postgresql"
-            app.kubernetes.io/name: postgresql
-            app.kubernetes.io/component: primary
+    # OpenShift uses SCC-assigned, namespace-specific UIDs.
+    # Avoid fixed UID/GID + fsGroup in the Bitnami subchart.
     podSecurityContext:
       enabled: true
-      fsGroup: 10001
+      seccompProfile:
+        type: RuntimeDefault
     containerSecurityContext:
       enabled: true
       runAsNonRoot: true
-      runAsUser: 10001
-      runAsGroup: 10001
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: true
       capabilities:
         drop:
           - ALL
-      seccompProfile:
-        type: RuntimeDefault
-    persistence:
-      enabled: true
-      size: 256Mi
-    resources:
-      limits:
-        cpu: 50m
-        memory: 256Mi
-        ephemeral-storage: 256Mi
-      requests:
-        cpu: 20m
-        memory: 100Mi
-        ephemeral-storage: 128Mi
     initdb:
-      scripts:
-        01_init_schema.sql: |
-          -- Sample schema for testing
-          CREATE TABLE IF NOT EXISTS public.users (
-              id SERIAL PRIMARY KEY,
-              username VARCHAR(255) UNIQUE NOT NULL,
-              email VARCHAR(255),
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-          );
-
-          -- Insert sample data
-          INSERT INTO public.users (username, email) VALUES
-          ('admin', 'admin@example.com'),
-          ('user1', 'user1@example.com')
-          ON CONFLICT (username) DO NOTHING;
-    networkPolicy:
-      enabled: false
-  commonLabels:
-    environment: dev
-    env: dev
-    owner: "{{cookiecutter.team_name}}"
-    project: "{{cookiecutter.project_name}}"
-    DataClass: "Medium"
-    app.kubernetes.io/part-of: "{{cookiecutter.project_name}}"
-    # Polaris expects instance label to match metadata.name in this repo's policy set
-    app.kubernetes.io/instance: "{{cookiecutter.app_name}}-postgresql"
-  commonAnnotations:
-    email: "{{cookiecutter.team_name}}@gov.bc.ca"
-
-priorityClass:
-  create: true
-  name: "{{cookiecutter.app_name}}-normal"
-  value: 1000
-  globalDefault: false
-  description: "Default application priority"
-
-telnet:
-  enabled: true
-  goldService: "sso-e27db1-dev.apps.gold.devops.gov.bc.ca" # tetsing connectivity from emerald to a service GOLD using telnet
-  goldPort: 80
-  diamSSO: dev.common-sso.justice.gov.bc.ca # testing outbound to DIAM Common-SSO
-  diamEgressIP: 142.34.102.72/32
-  diamPort: 80
-  justinEgressIP: 142.34.47.201/32 # JUSTIN DEV IP
-  publicService: "https://docker.io" # testing connectivity from emerald to internet via web proxy using curl
-  gitHubUrl: "https://github.com/bcgov/JAG-GITOPS-TEMPLATE.git" # test connectivity outbound to github via git clone
-  commonLabels:
-    environment: dev
-    env: dev
-    owner: "{{cookiecutter.team_name}}"
-    project: "{{cookiecutter.project_name}}"
-    DataClass: "Medium"
-    app.kubernetes.io/part-of: "{{cookiecutter.project_name}}"
+      # Keep SQL out of this values file; see chart template that builds the ConfigMap.
+      scriptsConfigMap: "{{cookiecutter.app_name}}-postgresql-initdb"
 
 frontend:
-  enabled: true
-  environment: dev
-  env: dev
-  owner: "{{cookiecutter.team_name}}"
-  project: "{{cookiecutter.project_name}}"
-  part: "{{cookiecutter.project_name}}"
-  replicaCount: 2
-  image:
-    repository: sookeke
-    name: react-baseapp
-    tag: nextjs
-    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000" # Example only; replace with real digest
-    pullPolicy: Always
-  containerSecurityContext:
-    runAsNonRoot: true
-    runAsUser: 10001
-    allowPrivilegeEscalation: false
-    readOnlyRootFilesystem: true
-  priorityClassName: "{{cookiecutter.app_name}}-normal"
-  autoscaling:
-    enabled: false
-    minReplicas: 2
-    maxReplicas: 10
-    targetCPUUtilizationPercentage: 80
-    targetMemoryUtilizationPercentage: 80
-  keycloak:
-    authUrl: https://sso-e27db1-dev.apps.gold.devops.gov.bc.ca/auth
-    realm: ISB
-    clientId: react-baseapp
-  apiUrl: "{{cookiecutter.app_name}}-webapi-core:8080"
-  podLabels:
-    DataClass: "Medium"
-  podAnnotations:
-    email: "{{cookiecutter.team_name}}@gov.bc.ca"
-  resources:
-    limits:
-      cpu: 50m
-      memory: 128Mi
-      ephemeral-storage: 256Mi
-    requests:
-      cpu: 20m
-      memory: 50Mi
-      ephemeral-storage: 128Mi
   route:
     host: react-baseapp-{{cookiecutter.licence_plate}}-dev.apps.emerald.devops.gov.bc.ca
-    annotations:
-      aviinfrasetting.ako.vmware.com/name: "dataclass-medium"
+  apiUrl: "{{cookiecutter.app_name}}-webapi-core:8080"
 
 backend:
-  enabled: true
-  environment: dev
-  app_name: "{{cookiecutter.app_name}}"
-  env: dev
-  owner: "{{cookiecutter.team_name}}"
-  project: "{{cookiecutter.project_name}}"
-  part: "{{cookiecutter.project_name}}"
-  replicaCount: 2
-  image:
-    repository: sookeke
-    name: web-api
-    tag: v2
-    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000" # Example only; replace with real digest
-    pullPolicy: Always
-  containerSecurityContext:
-    runAsNonRoot: true
-    runAsUser: 10001
-    allowPrivilegeEscalation: false
-    readOnlyRootFilesystem: true
-  priorityClassName: "{{cookiecutter.app_name}}-normal"
-  autoscaling:
-    enabled: false
-    minReplicas: 2
-    maxReplicas: 10
-    targetCPUUtilizationPercentage: 80
-    targetMemoryUtilizationPercentage: 80
-  keycloak:
-    realmUrl: https://sso-e27db1-dev.apps.gold.devops.gov.bc.ca/auth/realms/ISB
-    adminClientId: WEB-API
-    ClientId: WEB-API
   database:
     existingSecret: "{{cookiecutter.app_name}}-database"
-    existingSecretKey: "connectionString"
-  podLabels:
-    DataClass: "Medium"
-  podAnnotations:
-    email: "{{cookiecutter.team_name}}@gov.bc.ca"
-  resources:
-    limits:
-      cpu: 50m
-      memory: 128Mi
-      ephemeral-storage: 256Mi
-    requests:
-      cpu: 20m
-      memory: 50Mi
-      ephemeral-storage: 128Mi
+    existingSecretKey: connectionString

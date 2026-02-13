@@ -21,9 +21,23 @@
 {{- end -}}
 
 {{- define "ag-template.defaultSecurityContext" -}}
+{{- /*
+Determine OpenShift mode robustly.
+
+When used via ag-template.deployment we pass a dict that includes a "Values" key
+containing the parent chart values. Using `get` avoids any ambiguity around the
+special `.Values` object in different template contexts.
+*/ -}}
+{{- $vals := .Values -}}
+{{- if and (kindIs "map" .) (hasKey . "Values") -}}
+{{- $vals = (get . "Values") -}}
+{{- end -}}
+{{- $isOpenShift := (index (index $vals "global" | default dict) "openshift" | default false) -}}
 runAsNonRoot: true
+{{- if not $isOpenShift }}
 runAsUser: 10001
 runAsGroup: 10001
+{{- end }}
 allowPrivilegeEscalation: false
 readOnlyRootFilesystem: true
 capabilities:
@@ -57,5 +71,6 @@ seccompProfile:
 {{- end -}}
 
 {{- define "ag-template.dataClassLabel" -}}
-data-class: {{ include "ag-template.getDataClass" . | quote }}
+{{- $dc := (include "ag-template.getDataClass" .) -}}
+DataClass: {{ title $dc }}
 {{- end -}}
