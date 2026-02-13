@@ -7,6 +7,9 @@ REM (GitHub Actions uses .github/workflows/*.yaml)
 REM Default to non-interactive mode unless explicitly overridden.
 if not defined NO_PAUSE set "NO_PAUSE=1"
 
+REM Run Datree by default; allow opting out with RUN_DATREE=0.
+if not defined RUN_DATREE set "RUN_DATREE=1"
+
 echo =========================================
 echo NETWORK POLICY VALIDATION TEST SUITE
 echo =========================================
