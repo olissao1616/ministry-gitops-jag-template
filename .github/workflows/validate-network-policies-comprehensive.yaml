@@ -217,6 +217,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Download generated repo
+        uses: actions/download-artifact@v4
+        with:
+          name: generated-gitops-repo
+          path: generated
+
       - name: Download manifests
         uses: actions/download-artifact@v4
         with:
@@ -224,11 +230,17 @@ jobs:
 
       - name: Run kube-score
         run: |
+          IGNORE_ARGS="--ignore-test pod-networkpolicy"
+          if grep -q "openshift: true" "generated/deploy/${{ matrix.env }}_values.yaml"; then
+            echo "OpenShift mode detected for ${{ matrix.env }} - ignoring: container-security-context-user-group-id"
+            IGNORE_ARGS="$IGNORE_ARGS --ignore-test container-security-context-user-group-id"
+          fi
+
           docker run --rm -v $(pwd):/project \
             zegl/kube-score:latest score \
             /project/rendered-${{ matrix.env }}.yaml \
             --output-format ci \
-            --ignore-test pod-networkpolicy
+            $IGNORE_ARGS
 
   kube-linter:
     name: kube-linter (${{ matrix.env }})
