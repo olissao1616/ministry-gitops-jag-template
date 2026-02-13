@@ -217,12 +217,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download generated repo
-        uses: actions/download-artifact@v4
-        with:
-          name: generated-gitops-repo
-          path: generated
-
       - name: Download manifests
         uses: actions/download-artifact@v4
         with:
@@ -231,7 +225,9 @@ jobs:
       - name: Run kube-score
         run: |
           IGNORE_ARGS="--ignore-test pod-networkpolicy"
-          if grep -q "openshift: true" "generated/deploy/${{ matrix.env }}_values.yaml"; then
+          # OpenShift clusters use SCC-assigned, namespace-specific UIDs. If we render any OpenShift-only
+          # resources (e.g. Routes), ignore kube-score's fixed UID/GID heuristic.
+          if grep -qE "^kind: Route$|^apiVersion: route\.openshift\.io/" "rendered-${{ matrix.env }}.yaml"; then
             echo "OpenShift mode detected for ${{ matrix.env }} - ignoring: container-security-context-user-group-id"
             IGNORE_ARGS="$IGNORE_ARGS --ignore-test container-security-context-user-group-id"
           fi
