@@ -43,6 +43,14 @@ Parameters (dict):
 {{- end -}}
 {{- if not ($mv.disabled | default false) }}
 {{- $resName := (printf "%s-%s" $p.ApplicationGroup $p.Name | trunc 63 | trimSuffix "-") -}}
+{{- $labelData := dict -}}
+{{- if $p.LabelData -}}
+{{- $tmp := (include $p.LabelData $p | fromYaml) -}}
+{{- if and (kindIs "map" $tmp) (not (hasKey $tmp "Error")) -}}
+{{- $labelData = $tmp -}}
+{{- end -}}
+{{- end -}}
+{{- $dc := (include "ag-template.getDataClass" $p) -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -57,10 +65,8 @@ metadata:
     app.kubernetes.io/part-of: {{ $p.ApplicationGroup }}
     app.kubernetes.io/instance: {{ $resName }}
 {{ include "ag-template.commonLabels" $p | nindent 4 }}
-{{- if $p.LabelData }}
-{{- with (include $p.LabelData $p | fromYaml) }}
-{{- toYaml . | nindent 4 }}
-{{- end }}
+{{- if gt (len $labelData) 0 }}
+{{- toYaml $labelData | nindent 4 }}
 {{- end }}
 {{- $hasTopAnn := false }}
 {{- if $p.AnnotationData }}
@@ -99,11 +105,11 @@ spec:
         app.kubernetes.io/name: {{ $p.Name }}
         app.kubernetes.io/part-of: {{ $p.ApplicationGroup }}
         app.kubernetes.io/instance: {{ $resName }}
-{{ include "ag-template.dataClassLabel" $p | nindent 8 }}
-{{- if $p.LabelData }}
-{{- with (include $p.LabelData $p | fromYaml) }}
-{{- toYaml . | nindent 8 }}
-{{- end }}
+        {{- if not (hasKey $labelData "DataClass") }}
+        DataClass: {{ title $dc }}
+        {{- end }}
+{{- if gt (len $labelData) 0 }}
+{{- toYaml $labelData | nindent 8 }}
 {{- end }}
 {{- $hasPodAnn := false }}
 {{- if eq (default "" $p.Lang) "dotnetcore" }}

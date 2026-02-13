@@ -13,9 +13,10 @@
 
 {{- define "priorityclass.labels" -}}
 app.kubernetes.io/part-of: {{ .Values.project | default "app" | quote }}
-{{- if .Values.environment }}
-environment: {{ .Values.environment | quote }}
-env: {{ default .Values.environment .Values.env | quote }}
+{{- $global := (index .Values "global" | default dict) -}}
+{{- $environment := (index $global "environment" | default .Values.environment) -}}
+{{- if $environment }}
+environment: {{ $environment | quote }}
 {{- end }}
 {{- if .Values.owner }}
 owner: {{ .Values.owner | quote }}

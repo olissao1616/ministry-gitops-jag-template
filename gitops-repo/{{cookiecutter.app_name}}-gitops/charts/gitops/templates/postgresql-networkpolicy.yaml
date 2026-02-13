@@ -1,7 +1,7 @@
 {% raw %}{{/* PostgreSQL NetworkPolicy (guarded) */}}
 {{- if .Values.postgresql.enabled }}
 {{- $appGroup := .Values.project | default "app" -}}
-{{- $pgInstance := default (printf "%s-postgresql" .Release.Name) .Values.postgresql.fullnameOverride -}}
+{{- $pgInstance := .Release.Name -}}
 {{- $backendName := .Values.backend.image.name | default "backend" -}}
 
 {{- $networkPolicy := dict "Values" .Values -}}
@@ -38,9 +38,10 @@
 {{/* Helper fragments used by ag-template.networkpolicy */}}
 
 {{- define "postgresql.policy.labels" -}}
-{{- if .Values.environment }}
-environment: {{ .Values.environment }}
-env: {{ default .Values.environment .Values.env }}
+{{- $global := (index .Values "global" | default dict) -}}
+{{- $environment := (index $global "environment" | default .Values.environment) -}}
+{{- if $environment }}
+environment: {{ $environment }}
 {{- end }}
 {{- if .Values.owner }}
 owner: {{ .Values.owner }}

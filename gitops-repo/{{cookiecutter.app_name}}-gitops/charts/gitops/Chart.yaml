@@ -14,7 +14,7 @@ dependencies:
   
   # For local development: Uncomment below and comment out OCI registry above
   # - name: ag-helm-templates
-  #   version: 1.2.0
+  #   version: 1.0.4
   #   repository: file://../../../../shared-lib/ag-helm
 
   # External dependencies (Bitnami charts)
