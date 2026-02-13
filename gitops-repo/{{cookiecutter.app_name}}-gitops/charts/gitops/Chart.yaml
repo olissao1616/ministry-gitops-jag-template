@@ -9,7 +9,7 @@ dependencies:
   # Shared Helm library - all deployments use this
   # For production: Use OCI registry (recommended)
   - name: ag-helm-templates
-    version: 1.2.0
+    version: 1.2.1
     repository: "oci://ghcr.io/olissao1616/helm"
   
   # For local development: Uncomment below and comment out OCI registry above

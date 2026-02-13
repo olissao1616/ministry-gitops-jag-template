@@ -20,7 +20,9 @@ postgresql:
   # These are passed through to the Bitnami postgresql subchart so kube-linter
   # can enforce ownership metadata on the StatefulSet.
   commonLabels:
+    environment: development
     owner: "{{cookiecutter.team_name}}"
+    project: "{{cookiecutter.project_name}}"
   commonAnnotations:
     email: "{{cookiecutter.team_name}}@gov.bc.ca"
   primary:

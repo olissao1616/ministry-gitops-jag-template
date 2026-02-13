@@ -1,5 +1,5 @@
 telnet:
-  enabled: true
+  enabled: false
   goldService: "sso-e27db1-dev.apps.gold.devops.gov.bc.ca" # tetsing connectivity from emerald to a service GOLD using telnet
   goldPort: 80
   diamSSO: dev.common-sso.justice.gov.bc.ca # testing outbound to DIAM Common-SSO

@@ -256,7 +256,7 @@ customRules:
                 labels:
                   properties:
                     environment:
-                      const: prod
+                      const: production
         then:
           properties:
             spec:

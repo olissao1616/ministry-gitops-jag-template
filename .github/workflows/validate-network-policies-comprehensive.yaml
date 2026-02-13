@@ -88,11 +88,17 @@ jobs:
             > /tmp/rendered-${{ matrix.env }}.yaml
           echo "✓ Rendered $(wc -l < /tmp/rendered-${{ matrix.env }}.yaml) lines"
 
+          # Include the env values used for rendering so downstream jobs can make explicit decisions
+          # (e.g., OpenShift mode checks) without downloading the full generated repo artifact.
+          cp "../../deploy/${{ matrix.env }}_values.yaml" "/tmp/values-${{ matrix.env }}.yaml"
+
       - name: Upload manifests
         uses: actions/upload-artifact@v4
         with:
           name: rendered-${{ matrix.env }}
-          path: /tmp/rendered-${{ matrix.env }}.yaml
+          path: |
+            /tmp/rendered-${{ matrix.env }}.yaml
+            /tmp/values-${{ matrix.env }}.yaml
           retention-days: 7
 
   conftest:
@@ -224,11 +230,19 @@ jobs:
 
       - name: Run kube-score
         run: |
+          IGNORE_ARGS="--ignore-test pod-networkpolicy"
+          # OpenShift clusters use SCC-assigned, namespace-specific UIDs. Only ignore kube-score's
+          # UID/GID heuristic when the values file explicitly sets global.openshift: true.
+          if awk 'BEGIN{in_global=0} /^[^[:space:]]/{in_global=($0 ~ /^global:[[:space:]]*$/)} { if(in_global && $0 ~ /^[[:space:]]+openshift:[[:space:]]*true[[:space:]]*$/) exit 0 } END{ exit 1 }' "values-${{ matrix.env }}.yaml"; then
+            echo "OpenShift mode detected via values-${{ matrix.env }}.yaml (global.openshift: true) - ignoring: container-security-context-user-group-id"
+            IGNORE_ARGS="$IGNORE_ARGS --ignore-test container-security-context-user-group-id"
+          fi
+
           docker run --rm -v $(pwd):/project \
             zegl/kube-score:latest score \
             /project/rendered-${{ matrix.env }}.yaml \
             --output-format ci \
-            --ignore-test pod-networkpolicy
+            $IGNORE_ARGS
 
   kube-linter:
     name: kube-linter (${{ matrix.env }})

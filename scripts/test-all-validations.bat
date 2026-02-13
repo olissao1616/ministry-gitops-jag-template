@@ -368,8 +368,46 @@ REM Check for Helm Datree plugin
 echo =========================================
 echo DATREE (OFFLINE MODE) - Optional
 echo =========================================
-echo Skipping Datree - slow in offline mode
-echo Datree validation runs automatically in GitHub Actions CI
+if /i "%RUN_DATREE%"=="1" (
+    echo RUN_DATREE=1 set - running Datree CLI against rendered manifests ^(dev/test/prod^)...
+    echo.
+
+    if not exist "!TEST_DIR!\datree.exe" (
+        echo WARNING: datree.exe not found in !TEST_DIR!
+        echo Skipping Datree
+    ) else (
+        pushd "!TEST_DIR!" >nul 2>&1
+
+        REM Force offline local mode (no backend dependency)
+        "!TEST_DIR!\datree.exe" config set offline local >nul 2>&1
+
+        for %%E in (dev test prod) do (
+            echo Datree %%E...
+            "!TEST_DIR!\datree.exe" test "rendered-%%E.yaml" --ignore-missing-schemas --no-record --policy-config "%BASE_DIR%policies\datree-policies.yaml"
+            if errorlevel 1 (
+                echo FAILED: Datree ^(%%E^)
+                echo Datree ^(%%E^): FAILED>> "!SUMMARY_FILE!"
+                set "FAILED_FLAG=1"
+            ) else (
+                echo PASSED: Datree ^(%%E^)
+                echo Datree ^(%%E^): PASSED>> "!SUMMARY_FILE!"
+            )
+            echo.
+        )
+
+        popd >nul 2>&1
+    )
+) else (
+    echo Skipping Datree - set RUN_DATREE=1 to enable
+    echo Datree validation runs automatically in GitHub Actions CI
+)
+
+REM Datree can update FAILED_FLAG; recompute overall result for exit code correctness.
+set OVERALL_RESULT=PASSED
+if "%FAILED_FLAG%"=="1" set OVERALL_RESULT=FAILED
+if /i "%DOCKER_TOOLS%"=="FAILED" set OVERALL_RESULT=FAILED
+echo.
+echo Overall ^(including Datree^): %OVERALL_RESULT%
 
 echo.
 echo =========================================
