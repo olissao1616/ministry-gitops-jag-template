@@ -38,7 +38,7 @@ This repository is a **cookiecutter template** used to generate a standardized G
 Run the full validation suite (renders manifests, then scans them):
 
 - Windows + Git Bash:
-  - `bash ./test-all-validations.sh`
+  - `bash ./scripts/test-all-validations.sh`
 
 This script generates output under `test-output/` and produces a `test-output/rendered-dev.yaml` file that all tools scan.
 
@@ -941,6 +941,7 @@ Suggested approach:
 1) Add a new `.rego` file with a clear name (one rule per file is easier to maintain)
 2) Add a short example and rationale in the header comment
 3) Render manifests and run Conftest locally via `test-all-validations.sh`
+  - Use `bash ./scripts/test-all-validations.sh` (from repo root)
 
 ### Recipe: Make your change “scanner-friendly” (avoid future pipeline pain)
 
@@ -1086,7 +1087,7 @@ When adding a new component (worker, api-v2, scheduler), treat it as a checklist
 - Optional: HPA, PDB
 
 3) Validate locally:
-- `bash ./test-all-validations.sh`
+- `bash ./scripts/test-all-validations.sh`
 
 For the library wiring pattern, see:
 
@@ -1269,7 +1270,7 @@ Option C: use the **full template** (recommended once you need very specific sel
 Run the local suite:
 
 ```bash
-bash ./test-all-validations.sh
+bash ./scripts/test-all-validations.sh
 ```
 
 If the suite is green and the rendered output includes your Deployment + NetworkPolicy, you’re aligned with the platform rules.
@@ -1277,6 +1278,8 @@ If the suite is green and the rendered output includes your Deployment + Network
 ## Policy enforcement and “what will block my PR”
 
 This repo contains GitHub Actions workflows that render Helm manifests and run policy/security tools.
+
+See also: `docs/validation-and-policy-scans.md` (single page overview of tools, policies, local usage, and CI troubleshooting).
 
 Key workflows:
 
@@ -1287,7 +1290,8 @@ Key workflows:
 
 Local equivalence:
 
-- `test-all-validations.sh` (Windows-friendly local runner)
+- Windows: `scripts/test-all-validations.bat`
+- bash: `scripts/test-all-validations.sh`
 
 ## Troubleshooting (common zero-trust failures)
 

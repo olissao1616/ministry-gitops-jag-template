@@ -20,6 +20,12 @@ bash scripts/test-complete-deployment.sh
 
 This validates the complete workflow: generation, deployment, and verification.
 
+### Validation & policy scans
+
+For a single-page overview of which tools/policies run in CI, how to run the same checks locally, and how to troubleshoot failures, see:
+
+- `docs/validation-and-policy-scans.md`
+
 ## What This Template Provides
 
 - **Standardized Helm Charts** using the ag-helm shared library
