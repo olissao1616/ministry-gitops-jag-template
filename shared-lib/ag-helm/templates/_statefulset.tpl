@@ -76,21 +76,21 @@ spec:
           resources:
 {{ toYaml $mv.resources | nindent 12 }}
           {{- end }}
-              {{- if $p.SecurityContext }}
-        {{- $defaultSc := (include "ag-template.defaultSecurityContext" . | fromYaml) -}}
-        {{- $customSc := (include $p.SecurityContext $p | fromYaml) -}}
-        {{- if and (kindIs "map" $customSc) (hasKey $customSc "Error") -}}
-        {{- $customSc = dict -}}
-        {{- end -}}
-        {{- $enabled := (dig "enabled" true $customSc) -}}
-        {{- if $enabled }}
-              securityContext:
-        {{ toYaml (merge $defaultSc (omit $customSc "enabled")) | nindent 12 }}
-        {{- end }}
-              {{- else }}
-              securityContext:
-        {{ include "ag-template.defaultSecurityContext" . | nindent 12 }}
-              {{- end }}
+          {{- if $p.SecurityContext }}
+{{- $defaultSc := (include "ag-template.defaultSecurityContext" . | fromYaml) -}}
+{{- $customSc := (include $p.SecurityContext $p | fromYaml) -}}
+{{- if and (kindIs "map" $customSc) (hasKey $customSc "Error") -}}
+{{- $customSc = dict -}}
+{{- end -}}
+{{- $enabled := (dig "enabled" true $customSc) -}}
+{{- if $enabled }}
+          securityContext:
+{{ toYaml (merge $defaultSc (omit $customSc "enabled")) | nindent 12 }}
+{{- end }}
+          {{- else }}
+          securityContext:
+{{ include "ag-template.defaultSecurityContext" . | nindent 12 }}
+          {{- end }}
       {{- if $p.Volumes }}
       volumes:
 {{ include $p.Volumes $p | nindent 8 }}

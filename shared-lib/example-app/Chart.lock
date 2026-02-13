@@ -2,5 +2,5 @@ dependencies:
 - name: ag-helm-templates
   repository: file://../ag-helm
   version: 1.0.4
-digest: sha256:b81afebf27baff5fcf2cbc1f5bf38c38ef624207f46984e80a66b5623b4fd75c
-generated: "2026-02-09T22:25:56.3846337-05:00"
+digest: sha256:e2f7a0ecd779d86d068ca15a3ee43158c6d807f44c543e8980deec03549808ca
+generated: "2026-02-12T19:16:16.9319608-05:00"
