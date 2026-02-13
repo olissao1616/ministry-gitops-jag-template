@@ -93,8 +93,15 @@ spec:
 {{ toYaml $mv.resources | nindent 12 }}
 {{- end }}
 {{- if $p.SecurityContext }}
+{{- $customSc := (include $p.SecurityContext $p | fromYaml) -}}
+{{- if and (kindIs "map" $customSc) (hasKey $customSc "Error") -}}
+{{- $customSc = dict -}}
+{{- end -}}
+{{- $enabled := (dig "enabled" true $customSc) -}}
+{{- if $enabled }}
           securityContext:
-{{ include $p.SecurityContext $p | nindent 12 }}
+{{ toYaml (omit $customSc "enabled") | nindent 12 }}
+{{- end }}
 {{- else }}
           securityContext:
 {{ include "ag-template.defaultSecurityContext" $p | nindent 12 }}

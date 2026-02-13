@@ -3,6 +3,7 @@ Reusable StatefulSet template.
 Params similar to ag-template.deployment, plus:
   .ServiceName (string) - headless service name for stable network IDs
   .VolumeClaims (template name) - list of PVC templates
+  .SecurityContext (template name) - container securityContext fragment
 */}}
 {{- define "ag-template.statefulset" -}}
 {{- $p := . -}}
@@ -74,6 +75,21 @@ spec:
           {{- else if $mv.resources }}
           resources:
 {{ toYaml $mv.resources | nindent 12 }}
+          {{- end }}
+          {{- if $p.SecurityContext }}
+{{- $defaultSc := (include "ag-template.defaultSecurityContext" . | fromYaml) -}}
+{{- $customSc := (include $p.SecurityContext $p | fromYaml) -}}
+{{- if and (kindIs "map" $customSc) (hasKey $customSc "Error") -}}
+{{- $customSc = dict -}}
+{{- end -}}
+{{- $enabled := (dig "enabled" true $customSc) -}}
+{{- if $enabled }}
+          securityContext:
+{{ toYaml (merge $defaultSc (omit $customSc "enabled")) | nindent 12 }}
+{{- end }}
+          {{- else }}
+          securityContext:
+{{ include "ag-template.defaultSecurityContext" . | nindent 12 }}
           {{- end }}
       {{- if $p.Volumes }}
       volumes:
