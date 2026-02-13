@@ -90,7 +90,7 @@ jobs:
 
           # Include the env values used for rendering so downstream jobs can make explicit decisions
           # (e.g., OpenShift mode checks) without downloading the full generated repo artifact.
-          cp "../deploy/${{ matrix.env }}_values.yaml" "/tmp/values-${{ matrix.env }}.yaml"
+          cp "../../deploy/${{ matrix.env }}_values.yaml" "/tmp/values-${{ matrix.env }}.yaml"
 
       - name: Upload manifests
         uses: actions/upload-artifact@v4
