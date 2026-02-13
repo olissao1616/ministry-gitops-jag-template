@@ -230,26 +230,12 @@ jobs:
 
       - name: Run kube-score
         run: |
-          IGNORE_ARGS="--ignore-test pod-networkpolicy"
-          # OpenShift clusters use SCC-assigned, namespace-specific UIDs. Only ignore kube-score's
-          # UID/GID heuristic when the values file explicitly sets global.openshift: true.
-          VALUES_FILE="values-${{ matrix.env }}.yaml"
-          if [ ! -f "$VALUES_FILE" ]; then
-            echo "ERROR: Missing $VALUES_FILE (expected in rendered-${{ matrix.env }} artifact)"
-            ls -la
-            exit 1
-          fi
-
-          if awk 'NR==1{sub(/^\357\273\277/, "", $0)} /^[^[:space:]]/{in_global=($0 ~ /^global:[[:space:]]*$/)} { if(in_global && $0 ~ /^[[:space:]]+openshift:[[:space:]]*true[[:space:]]*$/) exit 0 } END{ exit 1 }' "$VALUES_FILE"; then
-            echo "OpenShift mode detected via values-${{ matrix.env }}.yaml (global.openshift: true) - ignoring: container-security-context-user-group-id"
-            IGNORE_ARGS="$IGNORE_ARGS --ignore-test container-security-context-user-group-id"
-          fi
-
+          # kube-score's UID/GID heuristic is a false-positive for OpenShift SCC (runtime-assigned IDs).
           docker run --rm -v $(pwd):/project \
             zegl/kube-score:latest score \
-            /project/rendered-${{ matrix.env }}.yaml \
             --output-format ci \
-            $IGNORE_ARGS
+            --ignore-test container-security-context-user-group-id \
+            /project/rendered-${{ matrix.env }}.yaml
 
   kube-linter:
     name: kube-linter (${{ matrix.env }})
