@@ -17,7 +17,7 @@ on:
 
 jobs:
   policy-check:
-    if: ${{ github.repository != 'bcgov-c/ministry-gitops-jag-template' }}
+    if: ${{ github.repository != 'bcgov-c/ministry-gitops-jag-template' && github.repository != 'olissao1616/ministry-gitops-jag-template' }}
     name: policy-check
     runs-on: ubuntu-latest
     env:

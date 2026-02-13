@@ -15,6 +15,34 @@ keycloak:
 
 postgresql:
   enabled: false
+  auth:
+    existingSecret: "{{cookiecutter.app_name}}-postgresql-auth"
+  # These are passed through to the Bitnami postgresql subchart so kube-linter/datree
+  # can enforce ownership/environment metadata on the StatefulSet when enabled.
+  commonLabels:
+    environment: production
+    owner: "{{cookiecutter.team_name}}"
+    project: "{{cookiecutter.project_name}}"
+  commonAnnotations:
+    email: "{{cookiecutter.team_name}}@gov.bc.ca"
+  primary:
+    # OpenShift uses SCC-assigned, namespace-specific UIDs.
+    # Avoid fixed UID/GID + fsGroup in the Bitnami subchart.
+    podSecurityContext:
+      enabled: true
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      enabled: true
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+    initdb:
+      # Keep SQL out of this values file; see chart template that builds the ConfigMap.
+      scriptsConfigMap: "{{cookiecutter.app_name}}-postgresql-initdb"
 
 frontend:
   route:

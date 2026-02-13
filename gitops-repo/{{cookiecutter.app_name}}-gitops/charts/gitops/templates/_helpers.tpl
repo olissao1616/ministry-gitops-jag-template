@@ -17,6 +17,19 @@ helm.sh/chart: {{ "{{" }} .Chart.Name {{ "}}" }}-{{ "{{" }} .Chart.Version | rep
 app.kubernetes.io/version: {{ "{{" }} .Chart.AppVersion | quote {{ "}}" }}
 {{ "{{" }}- end {{ "}}" }}
 app.kubernetes.io/managed-by: {{ "{{" }} .Release.Service {{ "}}" }}
+{{ "{{" }}- $global := (index .Values "global" | default dict) -{{ "}}" }}
+{{ "{{" }}- $environment := (index $global "environment" | default .Values.environment) -{{ "}}" }}
+{{ "{{" }}- if $environment {{ "}}" }}
+environment: {{ "{{" }} $environment | quote {{ "}}" }}
+{{ "{{" }}- end {{ "}}" }}
+{{ "{{" }}- $owner := (index $global "owner" | default .Values.owner) -{{ "}}" }}
+{{ "{{" }}- if $owner {{ "}}" }}
+owner: {{ "{{" }} $owner | quote {{ "}}" }}
+{{ "{{" }}- end {{ "}}" }}
+{{ "{{" }}- $project := (index $global "project" | default .Values.project) -{{ "}}" }}
+{{ "{{" }}- if $project {{ "}}" }}
+project: {{ "{{" }} $project | quote {{ "}}" }}
+{{ "{{" }}- end {{ "}}" }}
 {{ "{{" }}- end {{ "}}" }}
 
 {{ "{{" }}/*

@@ -9,6 +9,7 @@ __pycache__/
 
 # Test output
 test-output/
+test-output-*/
 dist/
 
 # IDEs
