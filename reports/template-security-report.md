@@ -9,7 +9,7 @@ Max auto-fix PRs per run: 5
 
 ## Summary
 
-- Total repos scanned: 4
+- Total repos scanned: 5
 - Template-derived repos: 1
 - New window: last 2 hour(s)
 - Template-derived repos created in window: 0
