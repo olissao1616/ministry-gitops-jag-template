@@ -10,6 +10,10 @@ const env = process.env;
 const token = env.GH_TOKEN || env.GITHUB_TOKEN;
 const orgs = (env.ORGS || '').split(/\s+/).filter(Boolean);
 const templateFullName = env.TEMPLATE_FULL_NAME; // e.g., org/template-repo
+const branchesToCheck = String(env.BRANCHES || env.PROTECT_BRANCHES || 'main,test,develop')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
 const MAX_PAGES = env.MAX_PAGES ? parseInt(env.MAX_PAGES, 10) : (env.FAST ? 1 : Infinity);
 const newWithinHours = env.NEW_WITHIN_HOURS ? parseInt(env.NEW_WITHIN_HOURS, 10) : null;
 const newJsonFile = env.NEW_JSON_FILE || null;
@@ -47,6 +51,75 @@ const gh = async (url, { method = 'GET' } = {}) => {
     throw new Error(`${res.status} ${res.statusText}: ${txt}`);
   }
   return res.json();
+};
+
+const getHttpStatus = (err) => {
+  const msg = err?.message || String(err);
+  const m = msg.match(/^(\d{3})\s/);
+  if (m) return parseInt(m[1], 10);
+  return err?.status ?? err?.response?.status ?? null;
+};
+
+const mdEscape = (s) => String(s ?? '').replace(/\|/g, '\\|');
+
+const sym = {
+  ok: '✅',
+  no: '❌',
+  missing: '—',
+  unknown: '⚠',
+};
+
+const yn = (v) => (v === true ? 'Yes' : v === false ? 'No' : '—');
+
+const getEnabled = (obj) => {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj === 'boolean') return obj;
+  if (typeof obj === 'object' && typeof obj.enabled === 'boolean') return obj.enabled;
+  return null;
+};
+
+const fetchBranchExists = async (owner, repo, branch) => {
+  try {
+    await gh(`https://api.github.com/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}`);
+    return true;
+  } catch (err) {
+    const status = getHttpStatus(err);
+    if (status === 404) return false;
+    throw err;
+  }
+};
+
+const fetchBranchProtection = async (owner, repo, branch) => {
+  try {
+    const protection = await gh(`https://api.github.com/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}/protection`);
+    const requiredStatusChecks = protection?.required_status_checks ?? null;
+    const prReviews = protection?.required_pull_request_reviews ?? null;
+
+    const contexts = Array.isArray(requiredStatusChecks?.contexts)
+      ? requiredStatusChecks.contexts
+      : (Array.isArray(requiredStatusChecks?.checks)
+        ? requiredStatusChecks.checks.map(c => c?.context).filter(Boolean)
+        : []);
+
+    return {
+      status: 'protected',
+      strict: requiredStatusChecks ? Boolean(requiredStatusChecks.strict) : null,
+      contexts,
+      approvals: typeof prReviews?.required_approving_review_count === 'number' ? prReviews.required_approving_review_count : null,
+      codeowners: prReviews ? Boolean(prReviews.require_code_owner_reviews) : null,
+      dismissStale: prReviews ? Boolean(prReviews.dismiss_stale_reviews) : null,
+      enforceAdmins: getEnabled(protection?.enforce_admins),
+      linearHistory: getEnabled(protection?.required_linear_history),
+      conversationResolution: getEnabled(protection?.required_conversation_resolution),
+      allowForcePushes: getEnabled(protection?.allow_force_pushes),
+      allowDeletions: getEnabled(protection?.allow_deletions),
+    };
+  } catch (err) {
+    const status = getHttpStatus(err);
+    if (status === 404) return { status: 'unprotected' };
+    if (status === 403) return { status: 'unknown', message: 'Access denied reading protection (403)' };
+    return { status: 'unknown', message: err?.message || String(err) };
+  }
 };
 
 const ghGraphQL = async (query, variables) => {
@@ -207,47 +280,173 @@ const fetchOwnerRepos = async (login) => {
 
 const main = async () => {
   const report = [];
-  report.push(`# Template usage report`);
-  report.push("");
+  report.push('# Template usage report');
+  report.push('');
   report.push(`Template: ${templateFullName}`);
-  report.push(`Orgs: ${orgs.join(', ')}`);
-  report.push("");
+  report.push(`Owners scanned: ${orgs.join(', ')}`);
+  report.push(`Branches checked: ${branchesToCheck.join(', ')}`);
+  report.push('Note: Branch protection status may show ⚠ if the token cannot read protection settings.');
+  report.push('');
 
-  const [templateOwner, templateRepo] = templateFullName.split('/');
-  if (!templateOwner || !templateRepo) {
-    throw new Error('TEMPLATE_FULL_NAME must be in the form owner/repo');
-  }
-
+  const allRepos = [];
   const matches = [];
+  let totalReposScanned = 0;
 
-  for (const org of orgs) {
-    report.push(`## Owner: ${org}`);
+  for (const owner of orgs) {
     let repos = [];
-    repos = await fetchOwnerRepos(org);
-    report.push(`Found ${repos.length} repos${Number.isFinite(MAX_PAGES) ? ` (limited by MAX_PAGES=${MAX_PAGES})` : ''}`);
+    repos = await fetchOwnerRepos(owner);
+    totalReposScanned += repos.length;
 
     for (const r of repos) {
-      if (r.template_full_name === templateFullName) {
-        matches.push({ org, name: r.name, full_name: r.full_name, html_url: r.html_url, created_at: r.created_at });
-      }
+      const isFromTemplate = r.template_full_name === templateFullName;
+      const item = {
+        owner,
+        name: r.name,
+        full_name: r.full_name,
+        html_url: r.html_url,
+        created_at: r.created_at,
+        template_full_name: r.template_full_name,
+        isFromTemplate,
+      };
+      allRepos.push(item);
+      if (isFromTemplate) matches.push(item);
     }
-
-    // Write per-org section
-    if (matches.filter(m => m.org === org).length) {
-      report.push('Repos created from template:');
-      for (const m of matches.filter(m => m.org === org)) {
-        report.push(`- ${m.full_name} | ${m.html_url} | created: ${m.created_at}`);
-      }
-    } else {
-      report.push('No repos found from template in this org.');
-    }
-
-    report.push("");
   }
 
-  // Summary
-  report.push('---');
-  report.push(`Total matches: ${matches.length}`);
+  // Per-repo branch protection checks
+  for (const repo of allRepos) {
+    const [owner, name] = repo.full_name.split('/', 2);
+    repo.branches = {};
+    for (const branch of branchesToCheck) {
+      const exists = await fetchBranchExists(owner, name, branch).catch(err => {
+        // If we can't even determine branch existence, treat as unknown.
+        return null;
+      });
+
+      if (exists === false) {
+        repo.branches[branch] = { exists: false, protection: { status: 'missing' } };
+        continue;
+      }
+      if (exists === null) {
+        repo.branches[branch] = { exists: null, protection: { status: 'unknown', message: 'Unable to read branch metadata' } };
+        continue;
+      }
+
+      const protection = await fetchBranchProtection(owner, name, branch);
+      repo.branches[branch] = { exists: true, protection };
+    }
+  }
+
+  // Summary section
+  report.push('## Summary');
+  report.push('');
+  report.push(`- Owners scanned: ${orgs.length}`);
+  report.push(`- Total repos scanned: ${totalReposScanned}`);
+  report.push(`- Total repos created from template: ${matches.length}`);
+  report.push('');
+
+  // Clean table: all repos
+  report.push('## Repositories');
+  report.push('');
+
+  const header = ['Repo', 'Created', 'From template', ...branchesToCheck, 'Notes'];
+  report.push(`| ${header.join(' | ')} |`);
+  report.push(`| ${header.map(() => '---').join(' | ')} |`);
+
+  for (const r of allRepos) {
+    const repoLink = `[${mdEscape(r.full_name)}](${r.html_url})`;
+    const created = mdEscape(r.created_at);
+    const fromTemplate = r.isFromTemplate ? 'Yes' : 'No';
+
+    const notes = [];
+    const cells = [];
+    for (const branch of branchesToCheck) {
+      const info = r.branches?.[branch];
+      if (!info) {
+        cells.push(sym.unknown);
+        continue;
+      }
+      if (info.exists === false) {
+        cells.push(sym.missing);
+        continue;
+      }
+      const p = info.protection;
+      if (p?.status === 'protected') {
+        cells.push(sym.ok);
+      } else if (p?.status === 'unprotected') {
+        cells.push(sym.no);
+      } else if (p?.status === 'missing') {
+        cells.push(sym.missing);
+      } else {
+        cells.push(sym.unknown);
+        if (p?.message) notes.push(`${branch}: ${p.message}`);
+      }
+    }
+
+    // Notes: surface missing branches and unknowns
+    const missingBranches = branchesToCheck.filter(b => r.branches?.[b]?.exists === false);
+    if (missingBranches.length) notes.push(`Missing branches: ${missingBranches.join(', ')}`);
+    if (!notes.length) notes.push('');
+
+    report.push(`| ${[repoLink, created, fromTemplate, ...cells, mdEscape(notes.join('; '))].join(' | ')} |`);
+  }
+
+  report.push('');
+  report.push('Legend: ✅ protected, ❌ not protected, — branch missing, ⚠ unknown/insufficient permissions');
+  report.push('');
+
+  // Detailed tables per repo
+  report.push('## Branch protection details');
+  report.push('');
+
+  for (const r of allRepos) {
+    report.push(`### ${r.full_name}`);
+    report.push('');
+    report.push(`- URL: ${r.html_url}`);
+    report.push(`- Created: ${r.created_at}`);
+    report.push(`- From template: ${r.isFromTemplate ? 'Yes' : 'No'}`);
+    report.push('');
+
+    const h = ['Branch', 'Exists', 'Protection', 'Contexts', 'Strict', 'Approvals', 'Codeowners', 'Linear history', 'Conversation resolution', 'Admins enforced', 'Notes'];
+    report.push(`| ${h.join(' | ')} |`);
+    report.push(`| ${h.map(() => '---').join(' | ')} |`);
+
+    for (const branch of branchesToCheck) {
+      const info = r.branches?.[branch];
+      if (!info) {
+        report.push(`| ${mdEscape(branch)} | ${yn(null)} | ${sym.unknown} | — | — | — | — | — | — | — | No data |`);
+        continue;
+      }
+
+      const exists = info.exists;
+      if (exists === false) {
+        report.push(`| ${mdEscape(branch)} | No | ${sym.missing} | — | — | — | — | — | — | — | Branch does not exist |`);
+        continue;
+      }
+      if (exists === null) {
+        report.push(`| ${mdEscape(branch)} | — | ${sym.unknown} | — | — | — | — | — | — | — | Unable to read branch metadata |`);
+        continue;
+      }
+
+      const p = info.protection;
+      if (p?.status === 'protected') {
+        const contexts = (p.contexts && p.contexts.length) ? mdEscape(p.contexts.join(', ')) : '—';
+        const strict = p.strict === null ? '—' : (p.strict ? 'Yes' : 'No');
+        const approvals = typeof p.approvals === 'number' ? String(p.approvals) : '—';
+        const codeowners = p.codeowners === null ? '—' : (p.codeowners ? 'Yes' : 'No');
+        const linear = p.linearHistory === null ? '—' : (p.linearHistory ? 'Yes' : 'No');
+        const conv = p.conversationResolution === null ? '—' : (p.conversationResolution ? 'Yes' : 'No');
+        const admins = p.enforceAdmins === null ? '—' : (p.enforceAdmins ? 'Yes' : 'No');
+        report.push(`| ${mdEscape(branch)} | Yes | ${sym.ok} | ${contexts} | ${strict} | ${approvals} | ${codeowners} | ${linear} | ${conv} | ${admins} |  |`);
+      } else if (p?.status === 'unprotected') {
+        report.push(`| ${mdEscape(branch)} | Yes | ${sym.no} | — | — | — | — | — | — | — | Not protected |`);
+      } else {
+        report.push(`| ${mdEscape(branch)} | Yes | ${sym.unknown} | — | — | — | — | — | — | — | ${mdEscape(p?.message || 'Unknown')} |`);
+      }
+    }
+
+    report.push('');
+  }
 
   await fs.writeFile(outputFile, report.join('\n'), 'utf8');
 
@@ -270,6 +469,7 @@ const main = async () => {
     await fs.writeFile(newJsonFile, JSON.stringify({
       template: templateFullName,
       orgs,
+      branches: branchesToCheck,
       newWithinHours,
       cutoff: cutoff.toISOString(),
       repos: newlyCreated,
