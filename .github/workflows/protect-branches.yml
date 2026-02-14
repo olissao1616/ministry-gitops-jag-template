@@ -24,6 +24,9 @@ on:
       BRANCH_PROTECTION_TOKEN:
         description: "Optional. Token with admin rights to set branch protections (PAT or GitHub App token). If omitted, uses github.token."
         required: false
+      CI:
+        description: "Optional. Alternate token secret name (PAT or GitHub App token) with admin rights to set branch protections. If omitted, uses BRANCH_PROTECTION_TOKEN then github.token."
+        required: false
 
 permissions:
   contents: read
@@ -35,7 +38,7 @@ jobs:
       - name: Apply branch protections
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.BRANCH_PROTECTION_TOKEN || github.token }}
+          github-token: ${{ secrets.BRANCH_PROTECTION_TOKEN || secrets.CI || github.token }}
           script: |
             const targetRepo = ("${{ inputs.target_repo }}" || process.env.GITHUB_REPOSITORY).trim();
             const licencePlate = ("${{ inputs.licence_plate }}" || "").trim();
