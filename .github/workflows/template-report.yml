@@ -12,7 +12,7 @@ jobs:
   report:
     runs-on: ubuntu-latest
     env:
-      # One token for everything in this workflow.
+      # Token for GitHub API operations in this workflow.
       # Must be a PAT (or GitHub App token) with permission to:
       # - read org repos listed in ORGS
       # - update branch protection on newly-created repos
@@ -141,19 +141,31 @@ jobs:
 
       - name: Persist report to main (overwrite)
         shell: bash
+        env:
+          # Use the repo-scoped GITHUB_TOKEN for pushing commits back to this repo.
+          # This avoids failures when the PAT is fine-grained / not granted to this repo.
+          PUSH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
 
-          # Use GH_TOKEN for pushes (single token for this workflow)
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          # Push using the workflow token (scoped to this repository)
+          if [ -z "${PUSH_TOKEN:-}" ]; then
+            echo "Missing PUSH_TOKEN (github.token)" >&2
+            exit 1
+          fi
+          git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
           # Ensure we're on the branch this workflow is running from (schedule uses default branch)
           BRANCH="${GITHUB_REF_NAME:-${GITHUB_REF##*/}}"
           git fetch --no-tags --prune origin "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
           git checkout -B "${BRANCH}" "origin/${BRANCH}"
+
+          # Rebase cleanly even though we just generated files in the working tree
+          git stash push -u -m "template-report" || true
           git pull --rebase origin "${BRANCH}" || true
+          git stash pop || true
 
           # Overwrite-in-place: commit the latest report and the new repo JSON (if present)
           git add reports/template-usage-report.md || true
