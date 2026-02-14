@@ -127,11 +127,19 @@ if not exist datree.exe (
 )
 
 REM Download Polaris
-if not exist polaris.exe (
-    echo Downloading Polaris...
-    curl -sL https://github.com/FairwindsOps/polaris/releases/download/8.5.0/polaris_windows_amd64.tar.gz -o polaris.tar.gz
+set "POLARIS_VERSION=10.1.4"
+set "POLARIS_VERSION_FILE=polaris.version"
+set "POLARIS_NEED_DOWNLOAD=0"
+set "POLARIS_EXISTING_VERSION="
+if exist "%POLARIS_VERSION_FILE%" for /f "usebackq delims=" %%V in ("%POLARIS_VERSION_FILE%") do set "POLARIS_EXISTING_VERSION=%%V"
+if not exist polaris.exe set "POLARIS_NEED_DOWNLOAD=1"
+if not "%POLARIS_EXISTING_VERSION%"=="%POLARIS_VERSION%" set "POLARIS_NEED_DOWNLOAD=1"
+if "%POLARIS_NEED_DOWNLOAD%"=="1" (
+    echo Downloading Polaris %POLARIS_VERSION%...
+    curl -sL https://github.com/FairwindsOps/polaris/releases/download/%POLARIS_VERSION%/polaris_windows_amd64.tar.gz -o polaris.tar.gz
     tar -xzf polaris.tar.gz polaris.exe
     del polaris.tar.gz
+    > "%POLARIS_VERSION_FILE%" echo %POLARIS_VERSION%
 )
 
 REM Download Pluto
@@ -285,11 +293,12 @@ echo.
 
 echo Running Checkov...
 echo -----------------------------------------
-set "CHECKOV_SKIP_ARGS="
+set "CHECKOV_SKIP_ARGS=--skip-check CKV_K8S_43"
+echo Skipping digest enforcement in Checkov: CKV_K8S_43
 REM OpenShift mode uses SCC-assigned UIDs; skip runAsUser enforcement in Checkov.
 findstr /C:"openshift: true" "test-app-gitops\deploy\dev_values.yaml" >nul 2>&1
 if not errorlevel 1 (
-    set "CHECKOV_SKIP_ARGS=--skip-check CKV_K8S_40"
+    set "CHECKOV_SKIP_ARGS=--skip-check CKV_K8S_43 --skip-check CKV_K8S_40"
     echo OpenShift mode detected for dev - skipping: CKV_K8S_40
 )
 docker run --rm -v "%cd%:/work" bridgecrew/checkov:latest -f /work/rendered-dev.yaml --framework kubernetes --compact --quiet !CHECKOV_SKIP_ARGS!

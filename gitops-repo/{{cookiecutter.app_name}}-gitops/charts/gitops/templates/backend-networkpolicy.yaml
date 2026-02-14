@@ -13,9 +13,11 @@
   "apps" (list (dict "name" $frontendName "ports" (list 8080)))
 ) -}}
 
+{{- if .Values.postgresql.enabled -}}
 {{- $_ := set $networkPolicy "AllowEgressTo" (dict
   "apps" (list (dict "name" "postgresql" "ports" (list 5432)))
 ) -}}
+{{- end -}}
 
 {{ include "ag-template.networkpolicy" $networkPolicy }}
 {{- end }}

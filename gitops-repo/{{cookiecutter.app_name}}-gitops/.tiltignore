@@ -1,0 +1,16 @@
+# Helm dependency cache
+charts/**/charts/
+*.tgz
+
+# Render outputs / scratch
+.tilt/
+
+# Repo noise
+.git/
+.github/
+.vscode/
+.idea/
+
+# Test outputs
+test-output/
+rendered-*.yaml

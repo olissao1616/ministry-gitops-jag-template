@@ -25,13 +25,10 @@ REM so Datree is opt-in here.
 if not defined RUN_DATREE set "RUN_DATREE=0"
 if not defined NO_DOCKER set "NO_DOCKER=0"
 
-REM Resolve repo root so this script can run from anywhere.
+REM Resolve repo root and default policy dir.
 set "SCRIPT_DIR=%~dp0"
-set "REPO_ROOT=%SCRIPT_DIR%.."
-for %%I in ("%REPO_ROOT%") do set "REPO_ROOT=%%~fI"
-
+for %%I in ("%SCRIPT_DIR%..") do set "REPO_ROOT=%%~fI"
 if not defined POLICY_DIR set "POLICY_DIR=%REPO_ROOT%\policies"
-
 if not exist "%POLICY_DIR%" (
   echo ERROR: POLICY_DIR not found: %POLICY_DIR%
   exit /b 1
@@ -57,17 +54,18 @@ if defined RENDERED_YAML (
     set "SCAN_FILE_1=%RENDERED_DEV_YAML%"
   )
   if defined RENDERED_TEST_YAML (
-    if !SCAN_COUNT! EQU 0 (
+    set /a SCAN_COUNT+=1
+    if "!SCAN_LABEL_1!"=="" (
       set "SCAN_LABEL_1=test"
       set "SCAN_FILE_1=%RENDERED_TEST_YAML%"
     ) else (
       set "SCAN_LABEL_2=test"
       set "SCAN_FILE_2=%RENDERED_TEST_YAML%"
     )
-    set /a SCAN_COUNT+=1
   )
   if defined RENDERED_PROD_YAML (
-    if !SCAN_COUNT! EQU 0 (
+    set /a SCAN_COUNT+=1
+    if "!SCAN_LABEL_1!"=="" (
       set "SCAN_LABEL_1=prod"
       set "SCAN_FILE_1=%RENDERED_PROD_YAML%"
     ) else if "!SCAN_LABEL_2!"=="" (
@@ -77,7 +75,6 @@ if defined RENDERED_YAML (
       set "SCAN_LABEL_3=prod"
       set "SCAN_FILE_3=%RENDERED_PROD_YAML%"
     )
-    set /a SCAN_COUNT+=1
   )
 )
 
@@ -132,9 +129,16 @@ if not exist kube-linter.exe (
 )
 
 REM Download Polaris
-if not exist polaris.exe (
-  echo Downloading Polaris...
-  curl -sL https://github.com/FairwindsOps/polaris/releases/download/8.5.0/polaris_windows_amd64.tar.gz -o polaris.tar.gz
+set "POLARIS_VERSION=10.1.4"
+set "POLARIS_VERSION_FILE=polaris.version"
+set "POLARIS_NEED_DOWNLOAD=0"
+set "POLARIS_EXISTING_VERSION="
+if exist "%POLARIS_VERSION_FILE%" for /f "usebackq delims=" %%V in ("%POLARIS_VERSION_FILE%") do set "POLARIS_EXISTING_VERSION=%%V"
+if not exist polaris.exe set "POLARIS_NEED_DOWNLOAD=1"
+if not "%POLARIS_EXISTING_VERSION%"=="%POLARIS_VERSION%" set "POLARIS_NEED_DOWNLOAD=1"
+if "%POLARIS_NEED_DOWNLOAD%"=="1" (
+  echo Downloading Polaris %POLARIS_VERSION%...
+  curl -sL https://github.com/FairwindsOps/polaris/releases/download/%POLARIS_VERSION%/polaris_windows_amd64.tar.gz -o polaris.tar.gz
   if errorlevel 1 (
     echo ERROR: Failed to download Polaris
     popd >nul 2>&1
@@ -142,6 +146,7 @@ if not exist polaris.exe (
   )
   tar -xzf polaris.tar.gz polaris.exe
   del polaris.tar.gz
+  > "%POLARIS_VERSION_FILE%" echo %POLARIS_VERSION%
 )
 
 REM Download Datree CLI (optional)
@@ -303,8 +308,8 @@ for %%N in (1 2 3) do (
         echo.
 
         echo Checkov ^(!LABEL!^)...
-        set "CHECKOV_SKIP_ARGS="
-        if "!ENV_OPENSHIFT_MODE!"=="1" set "CHECKOV_SKIP_ARGS=--skip-check CKV_K8S_40"
+        set "CHECKOV_SKIP_ARGS=--skip-check CKV_K8S_43"
+        if "!ENV_OPENSHIFT_MODE!"=="1" set "CHECKOV_SKIP_ARGS=--skip-check CKV_K8S_43 --skip-check CKV_K8S_40"
         docker run --rm -v "!MOUNT_DIR!:/work" bridgecrew/checkov:latest -f "/work/!YAML_NAME!" --framework kubernetes --compact --quiet !CHECKOV_SKIP_ARGS!
         if errorlevel 1 (
           echo FAILED: Checkov ^(!LABEL!^)

@@ -1,0 +1,11 @@
+{
+  "allowContexts": [
+    "<your-kube-context-name>"
+  ],
+  "envs": {
+    "dev": {
+      "openshift": false,
+      "localValuesFile": "./deploy/dev_values.local.yaml"
+    }
+  }
+}

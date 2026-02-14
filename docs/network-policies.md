@@ -1303,7 +1303,7 @@ Audit policies against best practices:
 brew install FairwindsOps/tap/polaris
 
 # Or download binary
-curl -L https://github.com/FairwindsOps/polaris/releases/download/8.0.0/polaris_linux_amd64.tar.gz | tar xz
+curl -L https://github.com/FairwindsOps/polaris/releases/download/10.1.4/polaris_linux_amd64.tar.gz | tar xz
 
 # Scan manifests
 polaris audit --audit-path ./rendered-manifests.yaml
@@ -1505,7 +1505,7 @@ jobs:
 
       - name: Check with Polaris
         run: |
-          docker run -v $(pwd):/app quay.io/fairwinds/polaris:8.0 \
+          docker run -v $(pwd):/app quay.io/fairwinds/polaris:10.1.4 \
             polaris audit --audit-path /app/rendered.yaml
 
       - name: Validate with Datree

@@ -36,7 +36,9 @@ postgresql:
     usePasswordFiles: true
   image:
     pullPolicy: Always
-    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    # Optional: set a real sha256 digest to pin the image.
+    # Leave blank to use the chart's default image tag.
+    digest: ""
   primary:
     networkPolicy:
       enabled: false
@@ -95,7 +97,9 @@ frontend:
     repository: sookeke
     name: react-baseapp
     tag: "nextjs"
-    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000" # Example only; replace with real digest
+    # Optional: set a real sha256 digest to pin the image.
+    # Leave blank to use `repository/name:tag`.
+    digest: ""
     pullPolicy: Always
 
   replicaCount: 2
@@ -155,7 +159,9 @@ backend:
     repository: sookeke
     name: web-api
     tag: "v2"
-    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000" # Example only; replace with real digest
+    # Optional: set a real sha256 digest to pin the image.
+    # Leave blank to use `repository/name:tag`.
+    digest: ""
     pullPolicy: Always
 
   replicaCount: 2

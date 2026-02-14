@@ -1,0 +1,99 @@
+# Example local overlay for non-OpenShift clusters (e.g., Rancher Desktop)
+# Use with Tilt by setting `envs.dev.localValuesFile` in `tilt/tilt.local.json`.
+
+global:
+  openshift: false
+
+# Local clusters typically can't reach the external SSO.
+# Disable Keycloak locally to avoid auth timeouts/noise.
+keycloak:
+  enabled: false
+
+frontend:
+  route:
+    enabled: false
+
+  containerSecurityContext:
+    enabled: false
+
+  # The sample image responds 200 on /api/public/health but /api/public/ready may be 404.
+  # Override probes for local Tilt so pods can become Ready.
+  probes:
+    livenessProbe:
+      httpGet:
+        path: /api/public/health
+        port: 8000
+      initialDelaySeconds: 30
+      timeoutSeconds: 25
+      periodSeconds: 5
+      successThreshold: 1
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /api/public/health
+        port: 8000
+      initialDelaySeconds: 30
+      timeoutSeconds: 25
+      periodSeconds: 5
+      successThreshold: 1
+      failureThreshold: 3
+
+  # The sample image can run with a read-only root filesystem, but it still
+  # needs writable locations for temp + supervisord logs.
+  volumes:
+    - name: tmp
+      emptyDir: {}
+    - name: supervisor-log
+      emptyDir: {}
+  volumeMounts:
+    - name: tmp
+      mountPath: /tmp
+    - name: supervisor-log
+      mountPath: /var/log/supervisor
+
+# For local-only Tilt runs, avoid depending on pre-created Secrets.
+# This keeps `tilt ci` runnable out-of-the-box.
+postgresql:
+  # The Bitnami chart may reference an image tag that disappears over time.
+  # For local Tilt runs, pin to a known-pullable tag.
+  image:
+    tag: latest
+  primary:
+    # On non-OpenShift clusters, run the Bitnami image with its expected UID/GID.
+    # This avoids permissions errors writing under /opt/bitnami/postgresql/conf.
+    persistence:
+      enabled: false
+    podSecurityContext:
+      fsGroup: 1001
+    containerSecurityContext:
+      runAsUser: 1001
+      # The image defaults to GID 0 (root). Keeping this avoids conf write failures.
+      runAsGroup: 0
+      # The Bitnami container needs to write temp files under /tmp.
+      readOnlyRootFilesystem: false
+  auth:
+    existingSecret: ""
+    username: appuser
+    database: appdb
+    password: localdev
+
+backend:
+  database:
+    existingSecret: ""
+    connectionString: "Host={{ cookiecutter.app_name }}-postgresql;Port=5432;Database=appdb;Username=appuser;Password=localdev"
+
+  probes:
+    livenessProbe:
+      httpGet:
+        path: /api/healthz
+        port: http
+      initialDelaySeconds: 15
+      timeoutSeconds: 5
+      periodSeconds: 10
+    readinessProbe:
+      httpGet:
+        path: /api/healthz
+        port: http
+      initialDelaySeconds: 15
+      timeoutSeconds: 5
+      periodSeconds: 10

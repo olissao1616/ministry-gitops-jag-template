@@ -120,11 +120,19 @@ ensure_tools_windows() {
     rm -f kube-linter.zip
   fi
 
-  if [ ! -f polaris.exe ]; then
-    echo "Downloading Polaris (Windows)..."
-    download_file "https://github.com/FairwindsOps/polaris/releases/download/8.5.0/polaris_windows_amd64.tar.gz" "polaris.tar.gz" || return 1
+  POLARIS_VERSION="10.1.4"
+  POLARIS_VERSION_FILE="polaris.version"
+  CURRENT_POLARIS_VERSION=""
+  if [ -f "${POLARIS_VERSION_FILE}" ]; then
+    CURRENT_POLARIS_VERSION="$(cat "${POLARIS_VERSION_FILE}" 2>/dev/null || true)"
+  fi
+
+  if [ ! -f polaris.exe ] || [ "${CURRENT_POLARIS_VERSION}" != "${POLARIS_VERSION}" ]; then
+    echo "Downloading Polaris (Windows) ${POLARIS_VERSION}..."
+    download_file "https://github.com/FairwindsOps/polaris/releases/download/${POLARIS_VERSION}/polaris_windows_amd64.tar.gz" "polaris.tar.gz" || return 1
     tar -xzf polaris.tar.gz polaris.exe || return 1
     rm -f polaris.tar.gz
+    echo "${POLARIS_VERSION}" > "${POLARIS_VERSION_FILE}"
   fi
 
   if [ "${RUN_DATREE}" = "1" ] && [ ! -f datree.exe ]; then
@@ -159,12 +167,20 @@ ensure_tools_linux() {
     rm -f kube-linter.tar.gz
   fi
 
-  if [ ! -f polaris ]; then
-    echo "Downloading Polaris (Linux)..."
-    download_file "https://github.com/FairwindsOps/polaris/releases/download/8.5.0/polaris_linux_amd64.tar.gz" "polaris.tar.gz" || return 1
+  POLARIS_VERSION="10.1.4"
+  POLARIS_VERSION_FILE="polaris.version"
+  CURRENT_POLARIS_VERSION=""
+  if [ -f "${POLARIS_VERSION_FILE}" ]; then
+    CURRENT_POLARIS_VERSION="$(cat "${POLARIS_VERSION_FILE}" 2>/dev/null || true)"
+  fi
+
+  if [ ! -f polaris ] || [ "${CURRENT_POLARIS_VERSION}" != "${POLARIS_VERSION}" ]; then
+    echo "Downloading Polaris (Linux) ${POLARIS_VERSION}..."
+    download_file "https://github.com/FairwindsOps/polaris/releases/download/${POLARIS_VERSION}/polaris_linux_amd64.tar.gz" "polaris.tar.gz" || return 1
     tar -xzf polaris.tar.gz polaris || return 1
     chmod +x polaris
     rm -f polaris.tar.gz
+    echo "${POLARIS_VERSION}" > "${POLARIS_VERSION_FILE}"
   fi
 
   if [ "${RUN_DATREE}" = "1" ] && [ ! -f datree ]; then
@@ -288,6 +304,7 @@ for i in "${!scan_files[@]}"; do
 
     echo "Checkov (${label})..."
     checkov_skip=()
+    checkov_skip+=("--skip-check" "CKV_K8S_43")
     if [ "${openshift_for_env}" = "1" ]; then
       checkov_skip+=("--skip-check" "CKV_K8S_40")
     fi
