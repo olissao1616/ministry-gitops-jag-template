@@ -246,7 +246,7 @@ jobs:
   protect:
     name: Protect branches
     needs: [preflight, push]
-    uses: ./.github/workflows/protect-branches.yml
+    uses: olissao1616/ministry-gitops-jag-template/.github/workflows/protect-branches.yml@main
     secrets: inherit
     with:
       target_repo: ${{ github.repository }}
