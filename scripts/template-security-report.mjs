@@ -26,6 +26,7 @@ const reportMode = String(env.REPORT_MODE || 'template-only').toLowerCase(); // 
 const autoFix = String(env.AUTO_FIX || 'true').toLowerCase() === 'true';
 const fixCodeowners = String(env.FIX_CODEOWNERS || 'true').toLowerCase() === 'true';
 const fixDependabot = String(env.FIX_DEPENDABOT || 'true').toLowerCase() === 'true';
+const maxAutofixPRs = env.MAX_AUTOFIX_PRS ? parseInt(env.MAX_AUTOFIX_PRS, 10) : 5;
 
 const newWithinHours = env.NEW_WITHIN_HOURS ? parseInt(env.NEW_WITHIN_HOURS, 10) : null;
 const jsonOutputFile = env.JSON_OUTPUT_FILE || 'reports/template-security-findings.json';
@@ -40,6 +41,16 @@ if (!owners.length) {
 }
 if (!templateFullName) {
   console.error('TEMPLATE_FULL_NAME is not set');
+  process.exit(1);
+}
+
+if (autoFix && !env.GH_TOKEN) {
+  console.error('AUTO_FIX is enabled but GH_TOKEN is not set. Provide an admin-capable PAT/GitHub App token in GH_TOKEN to create PRs in other repos.');
+  process.exit(1);
+}
+
+if (!Number.isFinite(maxAutofixPRs) || maxAutofixPRs < 0) {
+  console.error('MAX_AUTOFIX_PRS must be a non-negative integer when set');
   process.exit(1);
 }
 
@@ -359,6 +370,38 @@ const createOrUpdateFile = async ({ owner, repo, branch, filePath, content, mess
   );
 };
 
+const getBranchRefSha = async (owner, repo, branch) => {
+  try {
+    const r = await gh(`https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`);
+    return r?.object?.sha || null;
+  } catch (err) {
+    if (err?.status === 404) return null;
+    throw err;
+  }
+};
+
+const setBranchRefSha = async (owner, repo, branch, sha, { force = false } = {}) => {
+  return gh(`https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`,
+    {
+      method: 'PATCH',
+      body: { sha, force },
+    }
+  );
+};
+
+const findOpenPRForBranch = async ({ owner, repo, base, headBranch }) => {
+  // List open PRs and find one that matches head branch.
+  // Using list+filter avoids GitHub API quirks with head param in some cases.
+  try {
+    const prs = await gh(`https://api.github.com/repos/${owner}/${repo}/pulls?state=open&base=${encodeURIComponent(base)}&per_page=100`);
+    if (!Array.isArray(prs)) return null;
+    return prs.find(pr => pr?.head?.ref === headBranch) || null;
+  } catch (err) {
+    if (err?.status === 403) return null;
+    throw err;
+  }
+};
+
 const ensureFixPR = async ({ owner, repo, defaultBranch, fixes }) => {
   // fixes: [{path, content, message}]
   const repoInfo = await gh(`https://api.github.com/repos/${owner}/${repo}`);
@@ -368,14 +411,23 @@ const ensureFixPR = async ({ owner, repo, defaultBranch, fixes }) => {
   const baseSha = baseRef?.object?.sha;
   if (!baseSha) throw new Error(`Unable to resolve base sha for ${owner}/${repo}:${base}`);
 
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const branchName = `security/template-baseline-${stamp}`;
+  // Stable branch so we don't open a new PR every run
+  const branchName = 'security/template-baseline';
 
-  // Create branch
-  await gh(`https://api.github.com/repos/${owner}/${repo}/git/refs`, {
-    method: 'POST',
-    body: { ref: `refs/heads/${branchName}`, sha: baseSha },
-  });
+  // If an open PR already exists for this branch, reuse it.
+  const existingPR = await findOpenPRForBranch({ owner, repo, base, headBranch: branchName });
+
+  // Ensure branch exists. If branch exists and there is no open PR, reset it to the latest base.
+  const existingBranchSha = await getBranchRefSha(owner, repo, branchName);
+  if (!existingBranchSha) {
+    await gh(`https://api.github.com/repos/${owner}/${repo}/git/refs`, {
+      method: 'POST',
+      body: { ref: `refs/heads/${branchName}`, sha: baseSha },
+    });
+  } else if (!existingPR) {
+    // Keep branch fresh when it's not actively under review.
+    await setBranchRefSha(owner, repo, branchName, baseSha, { force: true });
+  }
 
   // Apply fixes
   for (const f of fixes) {
@@ -387,6 +439,10 @@ const ensureFixPR = async ({ owner, repo, defaultBranch, fixes }) => {
       content: f.content,
       message: f.message,
     });
+  }
+
+  if (existingPR) {
+    return { branch: branchName, prUrl: existingPR?.html_url || null, prNumber: existingPR?.number || null, reused: true };
   }
 
   // Create PR
@@ -407,7 +463,7 @@ const ensureFixPR = async ({ owner, repo, defaultBranch, fixes }) => {
     },
   });
 
-  return { branch: branchName, prUrl: pr?.html_url || null, prNumber: pr?.number || null };
+  return { branch: branchName, prUrl: pr?.html_url || null, prNumber: pr?.number || null, reused: false };
 };
 
 const buildCodeowners = (ownerLogin) => {
@@ -471,6 +527,8 @@ const main = async () => {
   findings.templateRepos = templateRepos.length;
 
   const displayRepos = reportMode === 'all' ? allRepos : templateRepos;
+
+  let openedOrUpdatedPRs = 0;
 
   for (const repo of displayRepos) {
     const [owner, name] = repo.full_name.split('/', 2);
@@ -559,7 +617,7 @@ const main = async () => {
     }
 
     // Auto-fix (PR-based)
-    if (autoFix) {
+    if (autoFix && openedOrUpdatedPRs < maxAutofixPRs) {
       const fixes = [];
       if (fixCodeowners && rec.checks.codeowners.status === 'missing') {
         fixes.push({
@@ -581,17 +639,21 @@ const main = async () => {
       if (fixes.length) {
         rec.autofix.attempted = true;
         try {
-          const { prUrl } = await ensureFixPR({
+          const { prUrl, reused } = await ensureFixPR({
             owner,
             repo: name,
             defaultBranch: ref,
             fixes,
           });
           rec.autofix.prUrl = prUrl;
+          openedOrUpdatedPRs += 1;
+          rec.autofix.reused = Boolean(reused);
         } catch (err) {
           rec.autofix.reason = err?.message || String(err);
         }
       }
+    } else if (autoFix && openedOrUpdatedPRs >= maxAutofixPRs) {
+      rec.autofix.reason = `Skipped auto-fix: MAX_AUTOFIX_PRS=${maxAutofixPRs} reached for this run`;
     }
 
     findings.repos.push(rec);
@@ -606,6 +668,7 @@ const main = async () => {
   report.push(`Report mode: ${reportMode}`);
   report.push(`Branches checked: ${branchesToCheck.join(', ')}`);
   report.push(`Auto-fix via PRs: ${autoFix ? 'enabled' : 'disabled'}`);
+  report.push(`Max auto-fix PRs per run: ${maxAutofixPRs}`);
   report.push('');
 
   report.push('## Summary');

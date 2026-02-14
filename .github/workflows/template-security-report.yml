@@ -30,6 +30,7 @@ jobs:
       AUTO_FIX: ${{ vars.TEMPLATE_SECURITY_AUTO_FIX || 'true' }}
       FIX_CODEOWNERS: ${{ vars.TEMPLATE_SECURITY_FIX_CODEOWNERS || 'true' }}
       FIX_DEPENDABOT: ${{ vars.TEMPLATE_SECURITY_FIX_DEPENDABOT || 'true' }}
+      MAX_AUTOFIX_PRS: ${{ vars.TEMPLATE_SECURITY_MAX_PRS || '5' }}
 
       # Optional: new window context (for future use / display)
       NEW_WITHIN_HOURS: ${{ vars.TEMPLATE_NEW_WITHIN_HOURS || '2' }}
@@ -49,6 +50,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Preflight (token + settings)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "AUTO_FIX=${AUTO_FIX}" >> "$GITHUB_STEP_SUMMARY"
+          echo "MAX_AUTOFIX_PRS=${MAX_AUTOFIX_PRS}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${AUTO_FIX}" = "true" ] && [ -z "${GH_TOKEN:-}" ]; then
+            echo "AUTO_FIX is enabled but GH_TOKEN is not set" >&2
+            exit 1
+          fi
 
       - name: Generate security posture report
         run: |
