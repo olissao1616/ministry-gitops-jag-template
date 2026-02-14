@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-14T07:00:43.365Z",
+  "generatedAt": "2026-02-14T07:14:09.752Z",
   "template": "olissao1616/ministry-gitops-jag-template",
   "owners": [
     "olissao1616"
@@ -13,8 +13,10 @@
     "test",
     "develop"
   ],
+  "newWithinHours": 2,
   "reposScanned": 4,
   "templateRepos": 1,
+  "templateReposNewInWindow": 0,
   "repos": [
     {
       "full_name": "olissao1616/test",
@@ -139,6 +141,19 @@
           "checkoutPersistFalse": false,
           "hasPermissionsBlock": false
         },
+        "security": {
+          "status": "reported",
+          "securityPolicy": "missing",
+          "vulnerabilityAlerts": false,
+          "automatedSecurityFixes": true,
+          "securityAndAnalysis": {
+            "status": "reported",
+            "advancedSecurity": null,
+            "secretScanning": true,
+            "secretScanningPushProtection": true,
+            "dependabotSecurityUpdates": false
+          }
+        },
         "branchProtection": {
           "status": "unknown",
           "branches": {
@@ -198,7 +213,7 @@
           "CODEOWNERS",
           "dependabot.yml"
         ],
-        "reused": false
+        "reused": true
       }
     }
   ]
