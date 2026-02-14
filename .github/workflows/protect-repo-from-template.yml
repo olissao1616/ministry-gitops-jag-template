@@ -1,0 +1,96 @@
+name: Protect branches (run from template)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: "Full repo name to protect (e.g., olissao1616/test)"
+        required: true
+        type: string
+      branches:
+        description: "Comma-separated list of branches to protect (e.g., main,test,develop)"
+        required: true
+        default: "main,test,develop"
+        type: string
+      required_contexts:
+        description: "Comma-separated required status check contexts"
+        required: false
+        default: "policy-check"
+        type: string
+      licence_plate:
+        description: "Optional licence plate (for logging)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  protect:
+    name: Apply protections to target repo
+    runs-on: ubuntu-latest
+    env:
+      BP_TOKEN: ${{ secrets.CI || secrets.BRANCH_PROTECTION_TOKEN }}
+    steps:
+      - name: Precheck token
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${BP_TOKEN}" ]; then
+            echo "✗ Missing token: set repo secret CI (preferred) or BRANCH_PROTECTION_TOKEN in this template repo." >&2
+            exit 1
+          fi
+
+      - name: Apply branch protections
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ env.BP_TOKEN }}
+          script: |
+            const targetRepo = ("${{ inputs.target_repo }}" || '').trim();
+            const licencePlate = ("${{ inputs.licence_plate }}" || "").trim();
+            const branchesCsv = "${{ inputs.branches }}";
+            const contextsCsv = "${{ inputs.required_contexts }}";
+
+            if (!targetRepo.includes('/')) {
+              core.setFailed(`Invalid target_repo: ${targetRepo}`);
+              return;
+            }
+
+            const [owner, repo] = targetRepo.split('/', 2);
+            const branches = branchesCsv.split(',').map(s => s.trim()).filter(Boolean);
+            const contexts = contextsCsv.split(',').map(s => s.trim()).filter(Boolean);
+
+            if (branches.length === 0) {
+              core.setFailed('No branches provided');
+              return;
+            }
+
+            core.info(`Protecting repo: ${owner}/${repo}`);
+            if (licencePlate) core.info(`Licence plate: ${licencePlate}`);
+            core.info(`Branches: ${branches.join(', ')}`);
+            core.info(`Required contexts: ${contexts.join(', ')}`);
+
+            for (const branch of branches) {
+              core.info(`Applying protection to ${branch}...`);
+              await github.rest.repos.updateBranchProtection({
+                owner,
+                repo,
+                branch,
+                required_status_checks: {
+                  strict: true,
+                  contexts,
+                },
+                enforce_admins: true,
+                required_pull_request_reviews: {
+                  dismiss_stale_reviews: true,
+                  require_code_owner_reviews: true,
+                  required_approving_review_count: 2,
+                },
+                restrictions: null,
+                required_linear_history: true,
+                allow_force_pushes: false,
+                allow_deletions: false,
+                required_conversation_resolution: true,
+              });
+              core.info(`✓ Protected ${branch}`);
+            }
