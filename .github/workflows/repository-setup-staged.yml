@@ -166,10 +166,12 @@ jobs:
           fi
 
           if [ -f ./staged/README.md ]; then
+            APP_NAME='${{ needs.preflight.outputs.app_name }}'
+            LICENCE_PLATE='${{ needs.preflight.outputs.licence_plate }}'
             sed -i \
-              -e "s/\\$app/${{ needs.preflight.outputs.app_name }}/g" \
-              -e "s/\\$namespace/${{ needs.preflight.outputs.licence_plate }}/g" \
-              -e "s/\\$team/${{ needs.preflight.outputs.licence_plate }}-team/g" \
+              -e 's/\$app/'"${APP_NAME}"'/g' \
+              -e 's/\$namespace/'"${LICENCE_PLATE}"'/g' \
+              -e 's/\$team/'"${LICENCE_PLATE}"'-team/g' \
               ./staged/README.md
           fi
 
@@ -244,7 +246,7 @@ jobs:
   protect:
     name: Protect branches
     needs: [preflight, push]
-    uses: ./.github/workflows/protect-branches.yml
+    uses: olissao1616/ministry-gitops-jag-template/.github/workflows/protect-branches.yml@main
     secrets: inherit
     with:
       target_repo: ${{ github.repository }}
