@@ -3,6 +3,7 @@
 // Usage: node scripts/template-report.mjs <outputFile>
 
 import fs from 'node:fs/promises';
+import path from 'node:path';
 
 const outputFile = process.argv[2] || 'reports/template-usage.md';
 const env = process.env;
@@ -10,6 +11,8 @@ const token = env.GH_TOKEN || env.GITHUB_TOKEN;
 const orgs = (env.ORGS || '').split(/\s+/).filter(Boolean);
 const templateFullName = env.TEMPLATE_FULL_NAME; // e.g., org/template-repo
 const MAX_PAGES = env.MAX_PAGES ? parseInt(env.MAX_PAGES, 10) : (env.FAST ? 1 : Infinity);
+const newWithinHours = env.NEW_WITHIN_HOURS ? parseInt(env.NEW_WITHIN_HOURS, 10) : null;
+const newJsonFile = env.NEW_JSON_FILE || null;
 
 if (!token) {
   console.error('Missing GH_TOKEN/GITHUB_TOKEN in environment');
@@ -21,6 +24,11 @@ if (!orgs.length) {
 }
 if (!templateFullName) {
   console.error('TEMPLATE_FULL_NAME is not set. Define a repository variable or set it in the workflow.');
+  process.exit(1);
+}
+
+if (newWithinHours !== null && (!Number.isFinite(newWithinHours) || newWithinHours <= 0)) {
+  console.error('NEW_WITHIN_HOURS must be a positive integer when set');
   process.exit(1);
 }
 
@@ -179,6 +187,31 @@ const main = async () => {
   report.push(`Total matches: ${matches.length}`);
 
   await fs.writeFile(outputFile, report.join('\n'), 'utf8');
+
+  // Optional: write a JSON list of newly-created repos from this template.
+  if (newJsonFile && newWithinHours !== null) {
+    const cutoff = new Date(Date.now() - (newWithinHours * 60 * 60 * 1000));
+    const newlyCreated = matches
+      .filter(m => {
+        const created = new Date(m.created_at);
+        return Number.isFinite(created.getTime()) && created >= cutoff;
+      })
+      .map(m => m.full_name)
+      // Deduplicate and keep stable ordering
+      .filter((v, i, a) => a.indexOf(v) === i);
+
+    const dir = path.dirname(newJsonFile);
+    if (dir && dir !== '.') {
+      await fs.mkdir(dir, { recursive: true });
+    }
+    await fs.writeFile(newJsonFile, JSON.stringify({
+      template: templateFullName,
+      orgs,
+      newWithinHours,
+      cutoff: cutoff.toISOString(),
+      repos: newlyCreated,
+    }, null, 2) + '\n', 'utf8');
+  }
 };
 
 main().catch(err => {
