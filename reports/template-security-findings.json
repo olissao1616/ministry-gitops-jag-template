@@ -1,0 +1,204 @@
+{
+  "generatedAt": "2026-02-14T06:56:46.221Z",
+  "template": "olissao1616/ministry-gitops-jag-template",
+  "owners": [
+    "olissao1616"
+  ],
+  "reportMode": "template-only",
+  "autoFix": true,
+  "fixCodeowners": true,
+  "fixDependabot": true,
+  "branchesChecked": [
+    "main",
+    "test",
+    "develop"
+  ],
+  "reposScanned": 4,
+  "templateRepos": 1,
+  "repos": [
+    {
+      "full_name": "olissao1616/test",
+      "url": "https://github.com/olissao1616/test",
+      "created_at": "2026-02-14T02:50:54Z",
+      "from_template": true,
+      "default_branch": "main",
+      "checks": {
+        "codeowners": {
+          "status": "missing"
+        },
+        "dependabot": {
+          "status": "missing"
+        },
+        "actions": {
+          "status": "reported",
+          "workflows": [
+            {
+              "path": ".github/workflows/ci.yml",
+              "totalUses": 6,
+              "pinned": 0,
+              "pinnedPct": 0,
+              "hasPullRequestTarget": false,
+              "checkoutPersistFalse": false,
+              "hasPermissionsBlock": false
+            },
+            {
+              "path": ".github/workflows/policy-enforcement.yaml",
+              "totalUses": 2,
+              "pinned": 0,
+              "pinnedPct": 0,
+              "hasPullRequestTarget": false,
+              "checkoutPersistFalse": false,
+              "hasPermissionsBlock": false
+            },
+            {
+              "path": ".github/workflows/protect-branches-dispatch.yml",
+              "totalUses": 1,
+              "pinned": 0,
+              "pinnedPct": 0,
+              "hasPullRequestTarget": false,
+              "checkoutPersistFalse": false,
+              "hasPermissionsBlock": false
+            },
+            {
+              "path": ".github/workflows/protect-branches.yml",
+              "totalUses": 1,
+              "pinned": 0,
+              "pinnedPct": 0,
+              "hasPullRequestTarget": false,
+              "checkoutPersistFalse": false,
+              "hasPermissionsBlock": false
+            },
+            {
+              "path": ".github/workflows/publish-on-tag.yml",
+              "totalUses": 2,
+              "pinned": 0,
+              "pinnedPct": 0,
+              "hasPullRequestTarget": false,
+              "checkoutPersistFalse": false,
+              "hasPermissionsBlock": false
+            },
+            {
+              "path": ".github/workflows/release.yml",
+              "totalUses": 4,
+              "pinned": 0,
+              "pinnedPct": 0,
+              "hasPullRequestTarget": false,
+              "checkoutPersistFalse": false,
+              "hasPermissionsBlock": false
+            },
+            {
+              "path": ".github/workflows/repository-setup-staged.yml",
+              "totalUses": 12,
+              "pinned": 0,
+              "pinnedPct": 0,
+              "hasPullRequestTarget": false,
+              "checkoutPersistFalse": false,
+              "hasPermissionsBlock": false
+            },
+            {
+              "path": ".github/workflows/repository-setup.yml",
+              "totalUses": 6,
+              "pinned": 0,
+              "pinnedPct": 0,
+              "hasPullRequestTarget": false,
+              "checkoutPersistFalse": false,
+              "hasPermissionsBlock": false
+            },
+            {
+              "path": ".github/workflows/template-report.yml",
+              "totalUses": 3,
+              "pinned": 0,
+              "pinnedPct": 0,
+              "hasPullRequestTarget": false,
+              "checkoutPersistFalse": false,
+              "hasPermissionsBlock": false
+            },
+            {
+              "path": ".github/workflows/validate-network-policies-comprehensive.yaml",
+              "totalUses": 33,
+              "pinned": 0,
+              "pinnedPct": 0,
+              "hasPullRequestTarget": false,
+              "checkoutPersistFalse": false,
+              "hasPermissionsBlock": false
+            },
+            {
+              "path": ".github/workflows/validate-network-policies.yaml",
+              "totalUses": 16,
+              "pinned": 0,
+              "pinnedPct": 0,
+              "hasPullRequestTarget": false,
+              "checkoutPersistFalse": false,
+              "hasPermissionsBlock": false
+            }
+          ],
+          "totalUses": 86,
+          "pinned": 0,
+          "pinnedPct": 0,
+          "hasPullRequestTarget": false,
+          "checkoutPersistFalse": false,
+          "hasPermissionsBlock": false
+        },
+        "branchProtection": {
+          "status": "unknown",
+          "branches": {
+            "main": {
+              "exists": true,
+              "status": "protected",
+              "strict": true,
+              "contexts": [
+                "policy-check"
+              ],
+              "approvals": 2,
+              "codeowners": true,
+              "enforceAdmins": true,
+              "linearHistory": true,
+              "conversationResolution": true,
+              "allowForcePushes": false,
+              "allowDeletions": false
+            },
+            "test": {
+              "exists": true,
+              "status": "protected",
+              "strict": true,
+              "contexts": [
+                "policy-check"
+              ],
+              "approvals": 2,
+              "codeowners": true,
+              "enforceAdmins": true,
+              "linearHistory": true,
+              "conversationResolution": true,
+              "allowForcePushes": false,
+              "allowDeletions": false
+            },
+            "develop": {
+              "exists": true,
+              "status": "protected",
+              "strict": true,
+              "contexts": [
+                "policy-check"
+              ],
+              "approvals": 2,
+              "codeowners": true,
+              "enforceAdmins": true,
+              "linearHistory": true,
+              "conversationResolution": true,
+              "allowForcePushes": false,
+              "allowDeletions": false
+            }
+          }
+        }
+      },
+      "autofix": {
+        "attempted": true,
+        "prUrl": null,
+        "reason": "403 Forbidden: {\"message\":\"Resource not accessible by personal access token\",\"documentation_url\":\"https://docs.github.com/rest/git/refs#create-a-reference\",\"status\":\"403\"}",
+        "fixes": [
+          "CODEOWNERS",
+          "dependabot.yml"
+        ]
+      }
+    }
+  ]
+}
