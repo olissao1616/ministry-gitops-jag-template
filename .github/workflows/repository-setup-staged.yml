@@ -208,19 +208,19 @@ jobs:
         run: |
           set -euo pipefail
 
-          TMP_STAGED_DIR="$(mktemp -d)"
-          tar -xzf staged-repo.tgz -C "${TMP_STAGED_DIR}"
+          rm -rf ./_staged
+          mkdir -p ./_staged
+          tar -xzf staged-repo.tgz -C ./_staged
 
           # Remove everything except .git and .github (keep current workflow files)
           find ./ -maxdepth 1 \
             ! -name '.git' \
             ! -name '.github' \
+            ! -name '_staged' \
             ! -name '.' \
             -exec rm -rf {} +
 
-          rsync -r --exclude '.github/workflows/**' "${TMP_STAGED_DIR}/" ./
-
-          rm -rf "${TMP_STAGED_DIR}"
+          rsync -r --exclude '.github/workflows/**' ./_staged/ ./
 
           # Safety: ensure workflows are unchanged before committing.
           git restore .github/workflows 2>/dev/null || true
@@ -247,7 +247,7 @@ jobs:
   protect:
     name: Protect branches
     needs: [preflight, push]
-    uses: ./.github/workflows/protect-branches.yml
+    uses: olissao1616/ministry-gitops-jag-template/.github/workflows/protect-branches.yml@main
     secrets: inherit
     with:
       target_repo: ${{ github.repository }}
