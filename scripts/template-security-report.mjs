@@ -57,6 +57,15 @@ if (!Number.isFinite(maxAutofixPRs) || maxAutofixPRs < 0) {
 const mdEscape = (s) => String(s ?? '').replace(/\|/g, '\\|');
 const sym = { ok: '✅', no: '❌', missing: '—', unknown: '⚠' };
 
+const getStatusEnabled = (obj) => {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj === 'boolean') return obj;
+  if (typeof obj === 'object' && typeof obj.enabled === 'boolean') return obj.enabled;
+  if (typeof obj === 'object' && typeof obj.status === 'string') return obj.status === 'enabled';
+  if (typeof obj === 'string') return obj === 'enabled';
+  return null;
+};
+
 const gh = async (url, { method = 'GET', body } = {}) => {
   const res = await fetch(url, {
     method,
@@ -78,6 +87,32 @@ const gh = async (url, { method = 'GET', body } = {}) => {
   const ct = res.headers.get('content-type') || '';
   if (!ct.includes('application/json')) return null;
   return res.json();
+};
+
+const ghBooleanFrom204 = async (url) => {
+  // Many GitHub security feature endpoints return:
+  // - 204 if enabled
+  // - 404 if disabled
+  // - 403 if you lack permissions
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'template-security-report-script'
+    },
+  });
+
+  if (res.status === 204) return true;
+  if (res.status === 404) return false;
+  if (res.status === 403) return null;
+  if (res.ok) return true;
+
+  const txt = await res.text();
+  const err = new Error(`${res.status} ${res.statusText}: ${txt}`);
+  err.status = res.status;
+  throw err;
 };
 
 const ghGraphQL = async (query, variables) => {
@@ -276,6 +311,45 @@ const fetchBranchProtection = async (owner, repo, branch) => {
     if (err?.status === 404) return { status: 'unprotected' };
     if (err?.status === 403) return { status: 'unknown', message: 'Access denied reading protection (403)' };
     return { status: 'unknown', message: err?.message || String(err) };
+  }
+};
+
+const fetchSecurityAndAnalysis = async (owner, repo) => {
+  try {
+    const repoInfo = await gh(`https://api.github.com/repos/${owner}/${repo}`);
+    const saa = repoInfo?.security_and_analysis ?? null;
+    if (!saa) return { status: 'unknown', message: 'security_and_analysis not available (user repo or missing permissions)' };
+
+    return {
+      status: 'reported',
+      advancedSecurity: getStatusEnabled(saa.advanced_security),
+      secretScanning: getStatusEnabled(saa.secret_scanning),
+      secretScanningPushProtection: getStatusEnabled(saa.secret_scanning_push_protection),
+      dependabotSecurityUpdates: getStatusEnabled(saa.dependabot_security_updates),
+    };
+  } catch (err) {
+    if (err?.status === 403) return { status: 'unknown', message: 'Access denied reading repo security settings (403)' };
+    return { status: 'unknown', message: err?.message || String(err) };
+  }
+};
+
+const fetchVulnerabilityAlertsEnabled = async (owner, repo) => {
+  try {
+    const enabled = await ghBooleanFrom204(`https://api.github.com/repos/${owner}/${repo}/vulnerability-alerts`);
+    return enabled;
+  } catch (err) {
+    if (err?.status === 403) return null;
+    return null;
+  }
+};
+
+const fetchAutomatedSecurityFixesEnabled = async (owner, repo) => {
+  try {
+    const enabled = await ghBooleanFrom204(`https://api.github.com/repos/${owner}/${repo}/automated-security-fixes`);
+    return enabled;
+  } catch (err) {
+    if (err?.status === 403) return null;
+    return null;
   }
 };
 
@@ -497,13 +571,20 @@ const main = async () => {
     fixCodeowners,
     fixDependabot,
     branchesChecked: branchesToCheck,
+    newWithinHours,
     reposScanned: 0,
     templateRepos: 0,
+    templateReposNewInWindow: 0,
     repos: [],
   };
 
   const allRepos = [];
   const templateRepos = [];
+  const templateReposNewInWindow = [];
+
+  const cutoffMs = (newWithinHours !== null)
+    ? (Date.now() - (newWithinHours * 60 * 60 * 1000))
+    : null;
 
   for (const owner of owners) {
     const repos = await fetchOwnerRepos(owner);
@@ -520,11 +601,18 @@ const main = async () => {
         isFromTemplate,
       };
       allRepos.push(item);
-      if (isFromTemplate) templateRepos.push(item);
+      if (isFromTemplate) {
+        templateRepos.push(item);
+        if (cutoffMs !== null) {
+          const createdMs = Date.parse(String(r.created_at || ''));
+          if (Number.isFinite(createdMs) && createdMs >= cutoffMs) templateReposNewInWindow.push(item);
+        }
+      }
     }
   }
 
   findings.templateRepos = templateRepos.length;
+  findings.templateReposNewInWindow = templateReposNewInWindow.length;
 
   const displayRepos = reportMode === 'all' ? allRepos : templateRepos;
 
@@ -544,6 +632,7 @@ const main = async () => {
         codeowners: { status: 'unknown' },
         dependabot: { status: 'unknown' },
         actions: { status: 'unknown' },
+        security: { status: 'unknown' },
         branchProtection: { status: 'unknown', branches: {} },
       },
       autofix: { attempted: false, prUrl: null, reason: null, fixes: [] },
@@ -571,6 +660,28 @@ const main = async () => {
     if (dep === true) rec.checks.dependabot = { status: 'present' };
     else if (dep === false) rec.checks.dependabot = { status: 'missing' };
     else rec.checks.dependabot = { status: 'unknown', message: 'Unable to read repo contents (403?)' };
+
+    // Security policy / basic security settings (report-only)
+    const securityPolicyPaths = ['SECURITY.md', '.github/SECURITY.md', 'docs/SECURITY.md'];
+    let securityPolicyFound = false;
+    let securityPolicyUnknown = false;
+    for (const p of securityPolicyPaths) {
+      const exists = await tryFileExists(owner, name, ref, p);
+      if (exists === true) { securityPolicyFound = true; break; }
+      if (exists === null) securityPolicyUnknown = true;
+    }
+
+    const saa = await fetchSecurityAndAnalysis(owner, name);
+    const vulnAlertsEnabled = await fetchVulnerabilityAlertsEnabled(owner, name);
+    const autoSecurityFixesEnabled = await fetchAutomatedSecurityFixesEnabled(owner, name);
+
+    rec.checks.security = {
+      status: 'reported',
+      securityPolicy: securityPolicyFound ? 'present' : (securityPolicyUnknown ? 'unknown' : 'missing'),
+      vulnerabilityAlerts: vulnAlertsEnabled,
+      automatedSecurityFixes: autoSecurityFixesEnabled,
+      securityAndAnalysis: saa,
+    };
 
     // Actions hardening (report-only)
     try {
@@ -675,13 +786,33 @@ const main = async () => {
   report.push('');
   report.push(`- Total repos scanned: ${findings.reposScanned}`);
   report.push(`- Template-derived repos: ${findings.templateRepos}`);
-  if (newWithinHours !== null) report.push(`- New window: last ${newWithinHours} hour(s)`);
+  if (newWithinHours !== null) {
+    report.push(`- New window: last ${newWithinHours} hour(s)`);
+    report.push(`- Template-derived repos created in window: ${findings.templateReposNewInWindow}`);
+  }
+  if (reportMode !== 'all') report.push(`- Note: Detailed checks are only performed for template-derived repos (REPORT_MODE=${reportMode})`);
   report.push('');
+
+  if (newWithinHours !== null) {
+    report.push('## New template-derived repositories (window)');
+    report.push('');
+    if (templateReposNewInWindow.length === 0) {
+      report.push('- None');
+      report.push('');
+    } else {
+      report.push('| Repo | Created | Default branch |');
+      report.push('| --- | --- | --- |');
+      for (const r of templateReposNewInWindow) {
+        report.push(`| [${mdEscape(r.full_name)}](${r.html_url}) | ${r.created_at} | ${mdEscape(r.default_branch || '—')} |`);
+      }
+      report.push('');
+    }
+  }
 
   report.push('## Repositories (template-derived)');
   report.push('');
 
-  const header = ['Repo', 'Created', 'CODEOWNERS', 'Dependabot', 'Actions pinned', ...branchesToCheck, 'Auto-fix PR', 'Notes'];
+  const header = ['Repo', 'Created', 'CODEOWNERS', 'Dependabot', 'SECURITY.md', 'Vuln alerts', 'Secret scan', 'Push protect', 'Actions pinned', ...branchesToCheck, 'Auto-fix PR', 'Notes'];
   report.push(`| ${header.join(' | ')} |`);
   report.push(`| ${header.map(() => '---').join(' | ')} |`);
 
@@ -699,6 +830,22 @@ const main = async () => {
     const pinnedPct = r.checks.actions?.pinnedPct;
     const actionsCell = typeof pinnedPct === 'number' ? `${pinnedPct}%` : sym.unknown;
 
+    const secPolicy = r.checks.security?.securityPolicy === 'present' ? sym.ok
+      : r.checks.security?.securityPolicy === 'missing' ? sym.no
+        : sym.unknown;
+
+    const vulnAlerts = r.checks.security?.vulnerabilityAlerts === true ? sym.ok
+      : r.checks.security?.vulnerabilityAlerts === false ? sym.no
+        : sym.unknown;
+
+    const secretScan = r.checks.security?.securityAndAnalysis?.secretScanning === true ? sym.ok
+      : r.checks.security?.securityAndAnalysis?.secretScanning === false ? sym.no
+        : sym.unknown;
+
+    const pushProtect = r.checks.security?.securityAndAnalysis?.secretScanningPushProtection === true ? sym.ok
+      : r.checks.security?.securityAndAnalysis?.secretScanningPushProtection === false ? sym.no
+        : sym.unknown;
+
     const bpCells = branchesToCheck.map(br => {
       const b = r.checks.branchProtection.branches?.[br];
       if (!b) return sym.unknown;
@@ -714,8 +861,26 @@ const main = async () => {
     if (r.checks.actions?.hasPullRequestTarget) notes.push('Uses pull_request_target');
     if (r.checks.actions?.totalUses > 0 && r.checks.actions?.pinnedPct < 100) notes.push('Unpinned actions');
     if (r.checks.codeowners?.message) notes.push(`CODEOWNERS: ${r.checks.codeowners.message}`);
+    if (r.autofix?.prUrl && Array.isArray(r.autofix?.fixes) && r.autofix.fixes.length) {
+      notes.push(`Auto-fix pending merge (${r.autofix.fixes.join(', ')})`);
+    }
 
-    report.push(`| ${[link, r.created_at, co, dep, actionsCell, ...bpCells, pr, mdEscape(notes.join('; '))].join(' | ')} |`);
+    const cells = [
+      link,
+      r.created_at,
+      co,
+      dep,
+      secPolicy,
+      vulnAlerts,
+      secretScan,
+      pushProtect,
+      actionsCell,
+      ...bpCells,
+      pr,
+      mdEscape(notes.join('; ')),
+    ];
+
+    report.push(`| ${cells.join(' | ')} |`);
   }
 
   report.push('');
