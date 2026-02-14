@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-14T06:56:46.221Z",
+  "generatedAt": "2026-02-14T07:00:43.365Z",
   "template": "olissao1616/ministry-gitops-jag-template",
   "owners": [
     "olissao1616"
@@ -192,12 +192,13 @@
       },
       "autofix": {
         "attempted": true,
-        "prUrl": null,
-        "reason": "403 Forbidden: {\"message\":\"Resource not accessible by personal access token\",\"documentation_url\":\"https://docs.github.com/rest/git/refs#create-a-reference\",\"status\":\"403\"}",
+        "prUrl": "https://github.com/olissao1616/test/pull/1",
+        "reason": null,
         "fixes": [
           "CODEOWNERS",
           "dependabot.yml"
-        ]
+        ],
+        "reused": false
       }
     }
   ]

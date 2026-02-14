@@ -17,7 +17,7 @@ Max auto-fix PRs per run: 5
 
 | Repo | Created | CODEOWNERS | Dependabot | Actions pinned | main | test | develop | Auto-fix PR | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [olissao1616/test](https://github.com/olissao1616/test) | 2026-02-14T02:50:54Z | ❌ | ❌ | 0% | ✅ | ✅ | ✅ | ❌ | Unpinned actions |
+| [olissao1616/test](https://github.com/olissao1616/test) | 2026-02-14T02:50:54Z | ❌ | ❌ | 0% | ✅ | ✅ | ✅ | [PR](https://github.com/olissao1616/test/pull/1) | Unpinned actions |
 
 Legend: ✅ compliant/present, ❌ missing/non-compliant, — branch missing, ⚠ unknown (permissions/API)
 
@@ -27,7 +27,7 @@ Legend: ✅ compliant/present, ❌ missing/non-compliant, — branch missing, �
 
 - URL: https://github.com/olissao1616/test
 - Default branch: main
-- Auto-fix error: 403 Forbidden: {"message":"Resource not accessible by personal access token","documentation_url":"https://docs.github.com/rest/git/refs#create-a-reference","status":"403"}
+- Auto-fix PR: https://github.com/olissao1616/test/pull/1
 
 | Branch | Exists | Protected | Strict | Contexts | Approvals | Codeowners required | Linear history | Conversation resolution | Admins enforced | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
