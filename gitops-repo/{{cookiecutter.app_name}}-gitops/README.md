@@ -90,6 +90,75 @@ GitOps repository for {{ cookiecutter.app_name }} - Deployed to BC Government Em
 
 ---
 
+{% if cookiecutter.enable_tilt == "yes" %}
+## Local Development (Tilt)
+
+Tilt provides a fast local loop for applying the Helm-rendered manifests to OpenShift and getting a live view of resources.
+
+This template uses Tilt's built-in `helm()` (i.e., `helm template` rendering) + `k8s_yaml(...)`.
+It does **not** use the `helm_resource` extension (`helm install/upgrade` semantics, hooks, etc.).
+
+### Prerequisites
+
+- Install Tilt: https://tilt.dev/
+- Ensure your kube context is pointing at Emerald (OpenShift) and that you have access to the target namespace.
+
+### Configure (recommended)
+
+Copy the example local override and set the allowed kube context(s) for safety:
+
+```bash
+cp tilt/tilt.local.json.example tilt/tilt.local.json
+```
+
+Edit `tilt/tilt.local.json` and set `allowContexts` to your expected kube context name.
+
+### Run
+
+```bash
+# Defaults to the env in tilt/tiltconfig.json (typically dev)
+tilt up
+
+# Or choose a specific environment
+tilt up -- --env=dev
+tilt up -- --env=test
+tilt up -- --env=prod
+```
+
+Tilt uses:
+
+- `Tiltfile` (thin entrypoint)
+- `tilt/tiltconfig.json` (shared team config: env mapping, resource grouping, port-forwards)
+- `deploy/*_values.yaml` (image tags, replicas, etc.)
+
+### Resource grouping (what you see in the UI)
+
+Tilt doesn't display "groups" as separate UI sections.
+Instead, this template maps `tilt/tiltconfig.json` `groups` into **Tilt resource labels**.
+
+Use the Tilt UI filter (labels) to quickly show just:
+
+- `app` (frontend + backend)
+- `data` (postgresql)
+
+### Port forwards (how to use them)
+
+Port-forwards are configured in `tilt/tiltconfig.json` under each resource `portForwards`.
+They only make sense when running `tilt up` (interactive); `tilt ci` exits when healthy.
+
+With `tilt up -- --env=dev` running, Tilt will expose:
+
+- Frontend: `http://localhost:8000`
+- Backend: `http://localhost:8080/api/healthz`
+- Postgres: `localhost:5432` (e.g., for `psql`)
+
+Tilt can optionally run `helm dependency update ./charts/gitops` (controlled by `helmDependencyUpdate` in `tilt/tiltconfig.json`).
+
+If you customize `frontend.image.name` / `backend.image.name`, you may need to update the workload names in `tilt/tiltconfig.json`.
+
+Note: this GitOps repo Tilt setup applies Kubernetes manifests; it does not build/push images.
+{% endif %}
+
 ## Quick Start
 
 ### 1. Deploy to Development

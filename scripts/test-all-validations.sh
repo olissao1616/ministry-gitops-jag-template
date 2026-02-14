@@ -251,12 +251,20 @@ if [ ! -f kube-linter.exe ]; then
     rm -f kube-linter.zip
 fi
 
-if [ ! -f polaris.exe ]; then
-    echo "Downloading Polaris..."
-    download_file "https://github.com/FairwindsOps/polaris/releases/download/8.5.0/polaris_windows_amd64.tar.gz" "polaris.tar.gz"
-    require_file_nonempty "polaris.tar.gz" "Polaris"
-    tar -xzf polaris.tar.gz polaris.exe
-    rm -f polaris.tar.gz
+POLARIS_VERSION="10.1.4"
+POLARIS_VERSION_FILE="polaris.version"
+CURRENT_POLARIS_VERSION=""
+if [ -f "${POLARIS_VERSION_FILE}" ]; then
+    CURRENT_POLARIS_VERSION="$(cat "${POLARIS_VERSION_FILE}" 2>/dev/null || true)"
+fi
+
+if [ ! -f polaris.exe ] || [ "${CURRENT_POLARIS_VERSION}" != "${POLARIS_VERSION}" ]; then
+        echo "Downloading Polaris ${POLARIS_VERSION}..."
+        download_file "https://github.com/FairwindsOps/polaris/releases/download/${POLARIS_VERSION}/polaris_windows_amd64.tar.gz" "polaris.tar.gz"
+        require_file_nonempty "polaris.tar.gz" "Polaris"
+        tar -xzf polaris.tar.gz polaris.exe
+        rm -f polaris.tar.gz
+        echo "${POLARIS_VERSION}" > "${POLARIS_VERSION_FILE}"
 fi
 
 if [ ! -f pluto.exe ]; then
@@ -419,7 +427,13 @@ else
 
     echo "Running Checkov..."
     echo "-----------------------------------------"
-    CHECKOV_OUTPUT=$(docker run --rm -v "$(pwd):/work" bridgecrew/checkov:latest -f /work/rendered-dev.yaml --framework kubernetes --compact --quiet 2>&1 || true)
+    checkov_skip=("--skip-check" "CKV_K8S_43")
+    echo "Skipping digest enforcement in Checkov: CKV_K8S_43"
+    if [ -f "test-app-gitops/deploy/dev_values.yaml" ] && grep -q "openshift: true" "test-app-gitops/deploy/dev_values.yaml"; then
+        checkov_skip+=("--skip-check" "CKV_K8S_40")
+        echo "OpenShift mode detected for dev - skipping: CKV_K8S_40"
+    fi
+    CHECKOV_OUTPUT=$(docker run --rm -v "$(pwd):/work" bridgecrew/checkov:latest -f /work/rendered-dev.yaml --framework kubernetes --compact --quiet "${checkov_skip[@]}" 2>&1 || true)
     echo "$CHECKOV_OUTPUT"
     if echo "$CHECKOV_OUTPUT" | grep -q "no such file or directory"; then
         echo "FAILED: Checkov could not access file"

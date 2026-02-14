@@ -198,7 +198,7 @@ jobs:
           docker run --rm \
             -v ${{ github.workspace }}:/app \
             -v /tmp/policies/polaris.yaml:/tmp/polaris.yaml \
-            quay.io/fairwinds/polaris:8.5.0 \
+            quay.io/fairwinds/polaris:10.1.4 \
             polaris audit \
             --audit-path /app/rendered-${{ matrix.env }}.yaml \
             --config /tmp/polaris.yaml \

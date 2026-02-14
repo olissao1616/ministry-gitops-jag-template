@@ -1,0 +1,64 @@
+{
+  "defaultEnv": "{{ cookiecutter.tilt_default_env }}",
+  "releaseName": "{{ cookiecutter.tilt_release_name }}",
+  "helmDependencyUpdate": true,
+
+  "allowContexts": [],
+
+  "envs": {
+    "dev": {
+      "namespace": "{{ cookiecutter.namespace_dev }}",
+      "valuesFile": "./deploy/dev_values.yaml",
+      "openshift": true
+    },
+    "test": {
+      "namespace": "{{ cookiecutter.namespace_test }}",
+      "valuesFile": "./deploy/test_values.yaml",
+      "openshift": true
+    },
+    "prod": {
+      "namespace": "{{ cookiecutter.namespace_prod }}",
+      "valuesFile": "./deploy/prod_values.yaml",
+      "openshift": true
+    }
+  },
+
+  "resources": {
+    "backend": {
+      "objects": [
+        "{{ cookiecutter.tilt_backend_workload }}:Deployment",
+        "{{ cookiecutter.tilt_backend_workload }}:Service"
+      ],
+      "portForwards": [
+        "8080:8080"
+      ]
+    },
+    "frontend": {
+      "objects": [
+        "{{ cookiecutter.tilt_frontend_workload }}:Deployment",
+        "{{ cookiecutter.tilt_frontend_workload }}:Service"
+      ],
+      "openshiftObjects": [
+        "{{ cookiecutter.tilt_frontend_workload }}:Route"
+      ],
+      "portForwards": [
+        "8000:8000"
+      ]
+    },
+    "postgresql": {
+      "objects": [
+        "{{ cookiecutter.tilt_release_name }}-postgresql:StatefulSet",
+        "{{ cookiecutter.tilt_release_name }}-postgresql:Service",
+        "{{ cookiecutter.tilt_release_name }}-postgresql-hl:Service"
+      ],
+      "portForwards": [
+        "5432:5432"
+      ]
+    }
+  },
+
+  "groups": {
+    "app": ["frontend", "backend"],
+    "data": ["postgresql"]
+  }
+}

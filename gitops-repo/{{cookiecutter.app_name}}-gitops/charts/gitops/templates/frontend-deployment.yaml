@@ -52,6 +52,9 @@
 {{- end }}
 
 {{- define "frontend.probes" }}
+{{- with .ModuleValues.probes }}
+{{- toYaml . | nindent 0 }}
+{{- else }}
 {{- $port := (dig "service" "port" 8000 .ModuleValues) -}}
 livenessProbe:
   httpGet:
@@ -71,6 +74,7 @@ readinessProbe:
   periodSeconds: 5
   successThreshold: 1
   failureThreshold: 3
+{{- end }}
 {{- end }}
 
 {{- define "frontend.volumes" }}

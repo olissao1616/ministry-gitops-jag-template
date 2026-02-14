@@ -9,6 +9,10 @@ charts/*/charts/
 test-output/
 rendered-*.yaml
 
+# Tilt
+tilt/tilt.local.json
+.tilt/
+
 # IDE
 .vscode/
 .idea/

@@ -1,5 +1,9 @@
 # Troubleshooting Guide
 
+For CI policy/scan failures (Datree, Conftest, kube-score, Trivy, Checkov, etc.), start here:
+
+- `docs/validation-and-policy-scans.md`
+
 ## Common Issues and Solutions
 
 ### Cookiecutter Generation Issues
