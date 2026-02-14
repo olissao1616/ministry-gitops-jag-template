@@ -31,6 +31,8 @@ jobs:
       # Protection settings
       PROTECT_BRANCHES: ${{ vars.TEMPLATE_PROTECT_BRANCHES || 'main,test,develop' }}
       REQUIRED_CONTEXTS: ${{ vars.TEMPLATE_REQUIRED_CONTEXTS || 'policy-check' }}
+      # Report presentation: 'template-only' (default) or 'all'
+      REPORT_MODE: ${{ vars.TEMPLATE_REPORT_MODE || 'template-only' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,6 +51,7 @@ jobs:
         env:
           ORGS: ${{ env.ORGS }}
           BRANCHES: ${{ env.PROTECT_BRANCHES }}
+          REPORT_MODE: ${{ env.REPORT_MODE }}
           NEW_WITHIN_HOURS: ${{ env.NEW_WITHIN_HOURS }}
           NEW_JSON_FILE: ${{ env.NEW_JSON_FILE }}
           TEMPLATE_FULL_NAME: ${{ env.TEMPLATE_FULL_NAME }}
