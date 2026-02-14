@@ -1,0 +1,112 @@
+name: Template Security Posture Report
+
+on:
+  schedule:
+    - cron: '15 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  security-report:
+    runs-on: ubuntu-latest
+    env:
+      # Cross-repo token for scanning + auto-fix PRs.
+      # Must be a PAT/GitHub App token with access to all template-derived repos in ORGS.
+      GH_TOKEN: ${{ secrets.CI || secrets.GHCR_PAT }}
+
+      # Owners to scan (orgs or users)
+      ORGS: ${{ vars.TEMPLATE_REPORT_ORGS || 'olissao1616' }}
+      TEMPLATE_FULL_NAME: ${{ vars.TEMPLATE_FULL_NAME || github.repository }}
+
+      # Branches to check
+      PROTECT_BRANCHES: ${{ vars.TEMPLATE_PROTECT_BRANCHES || 'main,test,develop' }}
+
+      # Reporting mode: template-only (default) or all
+      REPORT_MODE: ${{ vars.TEMPLATE_REPORT_MODE || 'template-only' }}
+
+      # Auto-fix (PR-based)
+      AUTO_FIX: ${{ vars.TEMPLATE_SECURITY_AUTO_FIX || 'true' }}
+      FIX_CODEOWNERS: ${{ vars.TEMPLATE_SECURITY_FIX_CODEOWNERS || 'true' }}
+      FIX_DEPENDABOT: ${{ vars.TEMPLATE_SECURITY_FIX_DEPENDABOT || 'true' }}
+
+      # Optional: new window context (for future use / display)
+      NEW_WITHIN_HOURS: ${{ vars.TEMPLATE_NEW_WITHIN_HOURS || '2' }}
+
+      OUTPUT_FILE: reports/template-security-report.md
+      JSON_OUTPUT_FILE: reports/template-security-findings.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate security posture report
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          node scripts/template-security-report.mjs "$OUTPUT_FILE"
+
+      - name: Persist report to main (overwrite)
+        shell: bash
+        env:
+          PUSH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+
+          # Push using repo-scoped GITHUB_TOKEN
+          git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          BRANCH="${GITHUB_REF_NAME:-${GITHUB_REF##*/}}"
+          git fetch --no-tags --prune origin "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
+          git checkout -B "${BRANCH}" "origin/${BRANCH}"
+
+          git stash push -u -m "template-security-report" || true
+          git pull --rebase origin "${BRANCH}" || true
+          git stash pop || true
+
+          git add "$OUTPUT_FILE" || true
+          git add "$JSON_OUTPUT_FILE" || true
+          git commit -m "[skip ci] chore(security): update template security posture report" || echo "No changes to commit"
+          git push origin "${BRANCH}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: template-security-report
+          path: |
+            reports/template-security-report.md
+            reports/template-security-findings.json
+          if-no-files-found: warn
+
+      - name: Add report to job summary
+        if: always()
+        shell: bash
+        env:
+          TEMPLATE_FULL_NAME: ${{ env.TEMPLATE_FULL_NAME }}
+          ORGS: ${{ env.ORGS }}
+          PROTECT_BRANCHES: ${{ env.PROTECT_BRANCHES }}
+          AUTO_FIX: ${{ env.AUTO_FIX }}
+        run: |
+          echo "## Template security posture" >> "$GITHUB_STEP_SUMMARY"
+          echo "Template: ${TEMPLATE_FULL_NAME}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Owners scanned: ${ORGS}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Branches checked: ${PROTECT_BRANCHES}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Auto-fix via PRs: ${AUTO_FIX}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f reports/template-security-report.md ]; then
+            cat reports/template-security-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No report found" >> "$GITHUB_STEP_SUMMARY"
+          fi
