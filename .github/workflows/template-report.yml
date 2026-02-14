@@ -170,8 +170,8 @@ jobs:
         if: always()
         shell: bash
         env:
-          ORGS: bcgov-c bcgov
-          TEMPLATE_FULL_NAME: bcgov-c/ministry-gitops-jag-template
+          ORGS: ${{ env.ORGS }}
+          TEMPLATE_FULL_NAME: ${{ env.TEMPLATE_FULL_NAME }}
         run: |
           echo "## Template usage report" >> "$GITHUB_STEP_SUMMARY"
           echo "Template: ${TEMPLATE_FULL_NAME:-<unset>}" >> "$GITHUB_STEP_SUMMARY"

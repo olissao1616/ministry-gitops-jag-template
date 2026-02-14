@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Query GitHub for all repos in ORGS and report which were created from TEMPLATE_FULL_NAME
+// Query GitHub for all repos in ORGS (orgs or users) and report which were created from TEMPLATE_FULL_NAME
 // Usage: node scripts/template-report.mjs <outputFile>
 
 import fs from 'node:fs/promises';
@@ -19,7 +19,7 @@ if (!token) {
   process.exit(1);
 }
 if (!orgs.length) {
-  console.error('No ORGS specified (space-separated)');
+  console.error('No ORGS specified (space-separated). Values may be orgs or user accounts.');
   process.exit(1);
 }
 if (!templateFullName) {
@@ -124,6 +124,87 @@ const fetchOrgReposViaGraphQL = async (org) => {
   }));
 };
 
+const fetchUserReposViaGraphQL = async (login) => {
+  const nodes = [];
+  let after = null;
+  let pages = 0;
+  const query = `
+    query($login:String!, $after:String) {
+      user(login:$login) {
+        repositories(first: 100, after: $after, orderBy: {field: CREATED_AT, direction: DESC}) {
+          nodes {
+            name
+            nameWithOwner
+            url
+            createdAt
+            templateRepository { nameWithOwner }
+          }
+          pageInfo { hasNextPage endCursor }
+          totalCount
+        }
+      }
+    }
+  `;
+  while (true) {
+    if (pages >= MAX_PAGES) break;
+    pages += 1;
+    const data = await ghGraphQL(query, { login, after });
+    const conn = data?.user?.repositories;
+    if (!conn) break;
+    if (Array.isArray(conn.nodes)) nodes.push(...conn.nodes);
+    if (!conn.pageInfo?.hasNextPage) break;
+    after = conn.pageInfo.endCursor;
+  }
+  return nodes.map(n => ({
+    name: n.name,
+    full_name: n.nameWithOwner,
+    html_url: n.url,
+    created_at: n.createdAt,
+    template_full_name: n.templateRepository?.nameWithOwner || null,
+  }));
+};
+
+const fetchOwnerRepos = async (login) => {
+  // Prefer GraphQL (fast, includes templateRepository) and fall back to REST.
+  try {
+    const orgRepos = await fetchOrgReposViaGraphQL(login);
+    if (orgRepos.length > 0) return orgRepos;
+  } catch {}
+
+  try {
+    const userRepos = await fetchUserReposViaGraphQL(login);
+    if (userRepos.length > 0) return userRepos;
+  } catch {}
+
+  // REST fallback: try org listing, then user listing.
+  let restRepos = [];
+  try {
+    restRepos = await paginate(`https://api.github.com/orgs/${login}/repos?type=all&sort=created&direction=desc`);
+  } catch (e) {
+    const msg = e?.message || String(e);
+    if (msg.includes('404') || msg.includes('Not Found')) {
+      restRepos = await paginate(`https://api.github.com/users/${login}/repos?type=all&sort=created&direction=desc`);
+    } else {
+      throw e;
+    }
+  }
+
+  const repos = [];
+  for (const r of restRepos) {
+    try {
+      const repo = await gh(`https://api.github.com/repos/${r.full_name}`);
+      repos.push({
+        name: r.name,
+        full_name: r.full_name,
+        html_url: r.html_url,
+        created_at: r.created_at,
+        template_full_name: repo.template_repository?.full_name || null,
+      });
+    } catch {}
+  }
+  return repos;
+};
+
 const main = async () => {
   const report = [];
   report.push(`# Template usage report`);
@@ -140,27 +221,9 @@ const main = async () => {
   const matches = [];
 
   for (const org of orgs) {
-    report.push(`## Org: ${org}`);
+    report.push(`## Owner: ${org}`);
     let repos = [];
-    try {
-      repos = await fetchOrgReposViaGraphQL(org);
-    } catch (e) {
-      // Fallback to REST if GraphQL fails
-      const restRepos = await paginate(`https://api.github.com/orgs/${org}/repos?type=all&sort=created&direction=desc`);
-      // Note: REST fallback will require per-repo fetch (slow); leave as last resort
-      for (const r of restRepos) {
-        try {
-          const repo = await gh(`https://api.github.com/repos/${r.full_name}`);
-          repos.push({
-            name: r.name,
-            full_name: r.full_name,
-            html_url: r.html_url,
-            created_at: r.created_at,
-            template_full_name: repo.template_repository?.full_name || null,
-          });
-        } catch {}
-      }
-    }
+    repos = await fetchOwnerRepos(org);
     report.push(`Found ${repos.length} repos${Number.isFinite(MAX_PAGES) ? ` (limited by MAX_PAGES=${MAX_PAGES})` : ''}`);
 
     for (const r of repos) {
