@@ -20,8 +20,6 @@ on:
         required: false
         default: "policy-check"
         type: string
-  repository_dispatch:
-    types: [protect-branches]
 permissions:
   contents: write
   repository-projects: write

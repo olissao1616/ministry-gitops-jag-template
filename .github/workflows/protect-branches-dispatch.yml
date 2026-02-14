@@ -5,7 +5,8 @@ on:
     types: [protect-branches]
 
 permissions:
-  contents: read
+    contents: write
+    repository-projects: write
 
 jobs:
   protect:
