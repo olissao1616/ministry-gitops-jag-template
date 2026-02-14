@@ -16,7 +16,8 @@ jobs:
       # Must be a PAT (or GitHub App token) with permission to:
       # - read org repos listed in ORGS
       # - update branch protection on newly-created repos
-      GH_TOKEN: ${{ secrets.GHCR_PAT }}
+      # Prefer CI (admin-capable PAT). GHCR_PAT is often packages-only and may not have repo admin rights.
+      GH_TOKEN: ${{ secrets.CI || secrets.GHCR_PAT }}
       # Configurable via repo/org variables (Settings -> Secrets and variables -> Actions -> Variables)
       # Space-separated org list to scan.
       ORGS: ${{ vars.TEMPLATE_REPORT_ORGS || 'olissao1616' }}
