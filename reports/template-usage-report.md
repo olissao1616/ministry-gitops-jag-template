@@ -1,23 +1,73 @@
 # Template usage report
 
-Template: bcgov-c/ministry-gitops-jag-template
-Orgs: bcgov-c, bcgov
+Template: olissao1616/ministry-gitops-jag-template
+Owners scanned: olissao1616
+Branches checked: main, test, develop
+Note: Branch protection status may show ⚠ if the token cannot read protection settings.
 
-## Org: bcgov-c
-Found 74 repos
-Repos created from template:
-- bcgov-c/tenant-gitops-ca61f6 | https://github.com/bcgov-c/tenant-gitops-ca61f6 | created: 2024-09-09T18:45:15Z
-- bcgov-c/tenant-gitops-dead5e | https://github.com/bcgov-c/tenant-gitops-dead5e | created: 2024-08-07T19:24:25Z
-- bcgov-c/tenant-gitops-e468b1 | https://github.com/bcgov-c/tenant-gitops-e468b1 | created: 2024-07-25T17:58:09Z
-- bcgov-c/tenant-gitops-e4161f | https://github.com/bcgov-c/tenant-gitops-e4161f | created: 2024-07-18T22:52:07Z
-- bcgov-c/tenant-gitops-bfc5f3 | https://github.com/bcgov-c/tenant-gitops-bfc5f3 | created: 2024-05-01T18:54:18Z
+## Summary
 
-## Org: bcgov
-Found 2407 repos
-Repos created from template:
-- bcgov/test22 | https://github.com/bcgov/test22 | created: 2024-05-02T16:18:08Z
-- bcgov/test222 | https://github.com/bcgov/test222 | created: 2024-04-24T22:46:00Z
-- bcgov/test | https://github.com/bcgov/test | created: 2024-03-20T05:07:18Z
+- Owners scanned: 1
+- Total repos scanned: 4
+- Total repos created from template: 1
 
----
-Total matches: 8
+## Repositories
+
+| Repo | Created | From template | main | test | develop | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| [olissao1616/test](https://github.com/olissao1616/test) | 2026-02-14T02:50:54Z | Yes | ✅ | ✅ | ✅ |  |
+| [olissao1616/ministry-gitops-jag-template](https://github.com/olissao1616/ministry-gitops-jag-template) | 2026-02-12T01:38:35Z | No | ❌ | — | — | Missing branches: test, develop |
+| [olissao1616/jag-pci-gateway](https://github.com/olissao1616/jag-pci-gateway) | 2026-01-16T05:38:33Z | No | ❌ | — | — | Missing branches: test, develop |
+| [olissao1616/doc-service](https://github.com/olissao1616/doc-service) | 2025-12-03T05:47:50Z | No | ⚠ | — | — | main: Access denied reading protection (403); Missing branches: test, develop |
+
+Legend: ✅ protected, ❌ not protected, — branch missing, ⚠ unknown/insufficient permissions
+
+## Branch protection details
+
+### olissao1616/test
+
+- URL: https://github.com/olissao1616/test
+- Created: 2026-02-14T02:50:54Z
+- From template: Yes
+
+| Branch | Exists | Protection | Contexts | Strict | Approvals | Codeowners | Linear history | Conversation resolution | Admins enforced | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| main | Yes | ✅ | policy-check | Yes | 2 | Yes | Yes | Yes | Yes |  |
+| test | Yes | ✅ | policy-check | Yes | 2 | Yes | Yes | Yes | Yes |  |
+| develop | Yes | ✅ | policy-check | Yes | 2 | Yes | Yes | Yes | Yes |  |
+
+### olissao1616/ministry-gitops-jag-template
+
+- URL: https://github.com/olissao1616/ministry-gitops-jag-template
+- Created: 2026-02-12T01:38:35Z
+- From template: No
+
+| Branch | Exists | Protection | Contexts | Strict | Approvals | Codeowners | Linear history | Conversation resolution | Admins enforced | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| main | Yes | ❌ | — | — | — | — | — | — | — | Not protected |
+| test | No | — | — | — | — | — | — | — | — | Branch does not exist |
+| develop | No | — | — | — | — | — | — | — | — | Branch does not exist |
+
+### olissao1616/jag-pci-gateway
+
+- URL: https://github.com/olissao1616/jag-pci-gateway
+- Created: 2026-01-16T05:38:33Z
+- From template: No
+
+| Branch | Exists | Protection | Contexts | Strict | Approvals | Codeowners | Linear history | Conversation resolution | Admins enforced | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| main | Yes | ❌ | — | — | — | — | — | — | — | Not protected |
+| test | No | — | — | — | — | — | — | — | — | Branch does not exist |
+| develop | No | — | — | — | — | — | — | — | — | Branch does not exist |
+
+### olissao1616/doc-service
+
+- URL: https://github.com/olissao1616/doc-service
+- Created: 2025-12-03T05:47:50Z
+- From template: No
+
+| Branch | Exists | Protection | Contexts | Strict | Approvals | Codeowners | Linear history | Conversation resolution | Admins enforced | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| main | Yes | ⚠ | — | — | — | — | — | — | — | Access denied reading protection (403) |
+| test | No | — | — | — | — | — | — | — | — | Branch does not exist |
+| develop | No | — | — | — | — | — | — | — | — | Branch does not exist |
