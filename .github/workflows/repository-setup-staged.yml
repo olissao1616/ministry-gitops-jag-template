@@ -245,12 +245,16 @@ jobs:
           git push -u origin develop
 
   protect:
-    name: Protect branches
+    name: Request branch protection (dispatch to template repo)
     needs: [preflight, push]
-    uses: olissao1616/ministry-gitops-jag-template/.github/workflows/protect-branches.yml@main
-    secrets: inherit
-    with:
-      target_repo: ${{ github.repository }}
-      licence_plate: ${{ needs.preflight.outputs.licence_plate }}
-      branches: "main,test,develop"
-      required_contexts: "policy-check"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch protection request to template repo
+        uses: peter-evans/repository-dispatch@v3
+        continue-on-error: true
+        with:
+          token: ${{ secrets.CI || secrets.BRANCH_PROTECTION_TOKEN || github.token }}
+          repository: olissao1616/ministry-gitops-jag-template
+          event-type: protect-branches
+          client-payload: >-
+            {"target_repo":"${{ github.repository }}","licence_plate":"${{ needs.preflight.outputs.licence_plate }}","branches":"main,test,develop","required_contexts":"policy-check"}

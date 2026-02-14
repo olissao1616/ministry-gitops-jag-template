@@ -20,16 +20,11 @@ on:
         required: false
         default: "policy-check"
         type: string
-    secrets:
-      BRANCH_PROTECTION_TOKEN:
-        description: "Optional. Token with admin rights to set branch protections (PAT or GitHub App token). If omitted, uses github.token."
-        required: false
-      CI:
-        description: "Optional. Alternate token secret name (PAT or GitHub App token) with admin rights to set branch protections. If omitted, uses BRANCH_PROTECTION_TOKEN then github.token."
-        required: false
-
+  repository_dispatch:
+    types: [protect-branches]
 permissions:
-  contents: read
+  contents: write
+  repository-projects: write
 
 jobs:
   protect:
@@ -89,7 +84,20 @@ jobs:
                 });
                 core.info(`✓ Protected ${branch}`);
               } catch (err) {
-                core.error(`Failed to protect ${branch}: ${err.message}`);
+                const status = err?.status ?? err?.response?.status;
+                const message = err?.message || String(err);
+
+                // Common case: workflow is using GITHUB_TOKEN (integration token) which is blocked
+                // from updating branch protection in many org/repo configurations.
+                if (status === 403 && message.includes('Resource not accessible by integration')) {
+                  core.warning(
+                    `Skipped protecting ${branch}: ${message}. ` +
+                      'Provide an admin-capable token via BRANCH_PROTECTION_TOKEN (or CI) secret to enable branch protection.'
+                  );
+                  continue;
+                }
+
+                core.error(`Failed to protect ${branch}: ${message}`);
                 throw err;
               }
             }
