@@ -11,6 +11,25 @@ permissions:
 jobs:
   report:
     runs-on: ubuntu-latest
+    env:
+      # One token for everything in this workflow.
+      # Must be a PAT (or GitHub App token) with permission to:
+      # - read org repos listed in ORGS
+      # - update branch protection on newly-created repos
+      GH_TOKEN: ${{ secrets.CI }}
+      # Configurable via repo/org variables (Settings -> Secrets and variables -> Actions -> Variables)
+      # Space-separated org list to scan.
+      ORGS: ${{ vars.TEMPLATE_REPORT_ORGS || 'bcgov-c bcgov olissao1616' }}
+      # Space-separated org allowlist for applying protection (defaults to ORGS).
+      PROTECT_ORGS: ${{ vars.TEMPLATE_PROTECT_ORGS || vars.TEMPLATE_REPORT_ORGS || 'bcgov-c bcgov' }}
+      # Template to match when detecting template-derived repos.
+      TEMPLATE_FULL_NAME: ${{ vars.TEMPLATE_FULL_NAME || github.repository }}
+      # How far back to consider a repo "new".
+      NEW_WITHIN_HOURS: ${{ vars.TEMPLATE_NEW_WITHIN_HOURS || '2' }}
+      NEW_JSON_FILE: ${{ vars.TEMPLATE_NEW_JSON_FILE || 'reports/new-template-repos.json' }}
+      # Protection settings
+      PROTECT_BRANCHES: ${{ vars.TEMPLATE_PROTECT_BRANCHES || 'main,test,develop' }}
+      REQUIRED_CONTEXTS: ${{ vars.TEMPLATE_REQUIRED_CONTEXTS || 'policy-check' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,11 +42,10 @@ jobs:
       - name: Generate report
         id: gen
         env:
-          # Space-separated list of orgs to scan
-          ORGS: bcgov-c bcgov
-          # Provide this as a repository variable like: owner/template-repo
-          TEMPLATE_FULL_NAME: bcgov-c/ministry-gitops-jag-template
-          GH_TOKEN: ${{ secrets.GHCR_PAT }}
+          ORGS: ${{ env.ORGS }}
+          NEW_WITHIN_HOURS: ${{ env.NEW_WITHIN_HOURS }}
+          NEW_JSON_FILE: ${{ env.NEW_JSON_FILE }}
+          TEMPLATE_FULL_NAME: ${{ env.TEMPLATE_FULL_NAME }}
           OUTPUT_FILE: reports/template-usage-report.md
         run: |
           set -euo pipefail
@@ -39,6 +57,86 @@ jobs:
           mkdir -p "$(dirname "$DEST")"
           mv "$OUTPUT_FILE" "$DEST"
           echo "file=$DEST" >> "$GITHUB_OUTPUT"
+
+      - name: Apply branch protection to newly created template repos
+        uses: actions/github-script@v7
+        env:
+          ORGS: ${{ env.PROTECT_ORGS }}
+          BRANCHES: ${{ env.PROTECT_BRANCHES }}
+          REQUIRED_CONTEXTS: ${{ env.REQUIRED_CONTEXTS }}
+          NEW_JSON_FILE: ${{ env.NEW_JSON_FILE }}
+        with:
+          github-token: ${{ env.GH_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = process.env.NEW_JSON_FILE;
+            const allowOrgs = (process.env.ORGS || '').split(/\s+/).filter(Boolean);
+            const branches = String(process.env.BRANCHES || 'main,test,develop')
+              .split(',').map(s => s.trim()).filter(Boolean);
+            const contexts = String(process.env.REQUIRED_CONTEXTS || 'policy-check')
+              .split(',').map(s => s.trim()).filter(Boolean);
+
+            if (!path || !fs.existsSync(path)) {
+              core.info('No new repo JSON file found; skipping protection.');
+              return;
+            }
+
+            const payload = JSON.parse(fs.readFileSync(path, 'utf8'));
+            const repos = Array.isArray(payload.repos) ? payload.repos : [];
+
+            if (!repos.length) {
+              core.info('No newly-created repos detected; nothing to protect.');
+              return;
+            }
+
+            core.info(`New repos detected: ${repos.join(', ')}`);
+
+            for (const full of repos) {
+              if (typeof full !== 'string' || !full.includes('/')) continue;
+              const [owner, repo] = full.split('/', 2);
+              if (allowOrgs.length && !allowOrgs.includes(owner)) {
+                core.info(`Skipping ${full} (owner not in ORGS allowlist)`);
+                continue;
+              }
+
+              for (const branch of branches) {
+                core.info(`Protecting ${full}:${branch}`);
+                try {
+                  await github.rest.repos.updateBranchProtection({
+                    owner,
+                    repo,
+                    branch,
+                    required_status_checks: {
+                      strict: true,
+                      contexts,
+                    },
+                    enforce_admins: true,
+                    required_pull_request_reviews: {
+                      dismiss_stale_reviews: true,
+                      require_code_owner_reviews: true,
+                      required_approving_review_count: 2,
+                    },
+                    restrictions: null,
+                    required_linear_history: true,
+                    allow_force_pushes: false,
+                    allow_deletions: false,
+                    required_conversation_resolution: true,
+                  });
+                  core.info(`✓ Protected ${full}:${branch}`);
+                } catch (err) {
+                  const status = err?.status ?? err?.response?.status;
+                  const message = err?.message || String(err);
+
+                  // Common cases: branch doesn't exist yet, repo isn't ready, or permissions missing.
+                  if (status === 404 || status === 422) {
+                    core.warning(`Skipped ${full}:${branch} (${status}): ${message}`);
+                    continue;
+                  }
+
+                  core.warning(`Failed ${full}:${branch} (${status ?? 'unknown'}): ${message}`);
+                }
+              }
+            }
 
       - name: Persist report to 'reports' branch
         shell: bash
