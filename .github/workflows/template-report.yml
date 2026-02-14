@@ -16,12 +16,12 @@ jobs:
       # Must be a PAT (or GitHub App token) with permission to:
       # - read org repos listed in ORGS
       # - update branch protection on newly-created repos
-      GH_TOKEN: ${{ secrets.CI }}
+      GH_TOKEN: ${{ secrets.GHCR_PAT }}
       # Configurable via repo/org variables (Settings -> Secrets and variables -> Actions -> Variables)
       # Space-separated org list to scan.
       ORGS: ${{ vars.TEMPLATE_REPORT_ORGS || 'bcgov-c bcgov olissao1616' }}
       # Space-separated org allowlist for applying protection (defaults to ORGS).
-      PROTECT_ORGS: ${{ vars.TEMPLATE_PROTECT_ORGS || vars.TEMPLATE_REPORT_ORGS || 'bcgov-c bcgov' }}
+      PROTECT_ORGS: ${{ vars.TEMPLATE_PROTECT_ORGS || vars.TEMPLATE_REPORT_ORGS || 'bcgov-c bcgov olissao1616' }}
       # Template to match when detecting template-derived repos.
       TEMPLATE_FULL_NAME: ${{ vars.TEMPLATE_FULL_NAME || github.repository }}
       # How far back to consider a repo "new".
