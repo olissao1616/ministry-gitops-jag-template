@@ -20,16 +20,11 @@ on:
         required: false
         default: "policy-check"
         type: string
-    secrets:
-      BRANCH_PROTECTION_TOKEN:
-        description: "Optional. Token with admin rights to set branch protections (PAT or GitHub App token). If omitted, uses github.token."
-        required: false
-      CI:
-        description: "Optional. Alternate token secret name (PAT or GitHub App token) with admin rights to set branch protections. If omitted, uses BRANCH_PROTECTION_TOKEN then github.token."
-        required: false
-
+  repository_dispatch:
+    types: [protect-branches]
 permissions:
-  contents: read
+  contents: write
+  repository-projects: write
 
 jobs:
   protect:
