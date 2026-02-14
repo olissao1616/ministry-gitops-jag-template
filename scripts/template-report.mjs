@@ -10,6 +10,7 @@ const env = process.env;
 const token = env.GH_TOKEN || env.GITHUB_TOKEN;
 const orgs = (env.ORGS || '').split(/\s+/).filter(Boolean);
 const templateFullName = env.TEMPLATE_FULL_NAME; // e.g., org/template-repo
+const reportMode = String(env.REPORT_MODE || 'template-only').toLowerCase(); // 'template-only' | 'all'
 const branchesToCheck = String(env.BRANCHES || env.PROTECT_BRANCHES || 'main,test,develop')
   .split(',')
   .map(s => s.trim())
@@ -285,6 +286,7 @@ const main = async () => {
   report.push(`Template: ${templateFullName}`);
   report.push(`Owners scanned: ${orgs.join(', ')}`);
   report.push(`Branches checked: ${branchesToCheck.join(', ')}`);
+  report.push(`Report mode: ${reportMode}`);
   report.push('Note: Branch protection status may show ⚠ if the token cannot read protection settings.');
   report.push('');
 
@@ -313,8 +315,10 @@ const main = async () => {
     }
   }
 
+  const displayRepos = reportMode === 'all' ? allRepos : matches;
+
   // Per-repo branch protection checks
-  for (const repo of allRepos) {
+  for (const repo of displayRepos) {
     const [owner, name] = repo.full_name.split('/', 2);
     repo.branches = {};
     for (const branch of branchesToCheck) {
@@ -343,6 +347,11 @@ const main = async () => {
   report.push(`- Owners scanned: ${orgs.length}`);
   report.push(`- Total repos scanned: ${totalReposScanned}`);
   report.push(`- Total repos created from template: ${matches.length}`);
+  if (reportMode !== 'all') {
+    report.push(`- Repos shown in tables (template-only): ${matches.length}`);
+  } else {
+    report.push(`- Repos shown in tables (all): ${allRepos.length}`);
+  }
   report.push('');
 
   // Clean table: all repos
@@ -353,7 +362,7 @@ const main = async () => {
   report.push(`| ${header.join(' | ')} |`);
   report.push(`| ${header.map(() => '---').join(' | ')} |`);
 
-  for (const r of allRepos) {
+  for (const r of displayRepos) {
     const repoLink = `[${mdEscape(r.full_name)}](${r.html_url})`;
     const created = mdEscape(r.created_at);
     const fromTemplate = r.isFromTemplate ? 'Yes' : 'No';
@@ -399,7 +408,7 @@ const main = async () => {
   report.push('## Branch protection details');
   report.push('');
 
-  for (const r of allRepos) {
+  for (const r of displayRepos) {
     report.push(`### ${r.full_name}`);
     report.push('');
     report.push(`- URL: ${r.html_url}`);
