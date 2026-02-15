@@ -21,8 +21,8 @@ jobs:
     name: policy-check
     runs-on: ubuntu-latest
     env:
-      POLICY_SOURCE_ORG: ${{ vars.POLICY_SOURCE_ORG || github.repository_owner }}
-      POLICY_SOURCE_REPO: ministry-gitops-jag-template
+      POLICY_SOURCE_ORG: ${{ vars.POLICY_SOURCE_ORG || 'olissao1616' }}
+      POLICY_SOURCE_REPO: ${{ vars.POLICY_SOURCE_REPO || 'ag-devops' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -48,7 +48,7 @@ jobs:
         run: |
           mkdir -p /tmp/policies
           curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -L "https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/main/policies/datree-policies.yaml" \
+            -L "https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/main/cd/policies/datree-policies.yaml" \
             -o /tmp/datree-policies.yaml
 
       - name: Policy Enforcement
