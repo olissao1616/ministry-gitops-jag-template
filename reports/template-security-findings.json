@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-14T23:40:20.272Z",
+  "generatedAt": "2026-02-15T03:22:53.248Z",
   "template": "olissao1616/ministry-gitops-jag-template",
   "owners": [
     "olissao1616"
@@ -16,12 +16,12 @@
   "newWithinHours": 2,
   "reposScanned": 5,
   "templateRepos": 1,
-  "templateReposNewInWindow": 0,
+  "templateReposNewInWindow": 1,
   "repos": [
     {
       "full_name": "olissao1616/test",
       "url": "https://github.com/olissao1616/test",
-      "created_at": "2026-02-14T02:50:54Z",
+      "created_at": "2026-02-15T01:52:03Z",
       "from_template": true,
       "default_branch": "main",
       "checks": {
@@ -36,7 +36,7 @@
           "workflows": [
             {
               "path": ".github/workflows/ci.yml",
-              "totalUses": 6,
+              "totalUses": 13,
               "pinned": 0,
               "pinnedPct": 0,
               "hasPullRequestTarget": false,
@@ -108,11 +108,20 @@
             },
             {
               "path": ".github/workflows/template-report.yml",
+              "totalUses": 4,
+              "pinned": 0,
+              "pinnedPct": 0,
+              "hasPullRequestTarget": false,
+              "checkoutPersistFalse": true,
+              "hasPermissionsBlock": false
+            },
+            {
+              "path": ".github/workflows/template-security-report.yml",
               "totalUses": 3,
               "pinned": 0,
               "pinnedPct": 0,
               "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
+              "checkoutPersistFalse": true,
               "hasPermissionsBlock": false
             },
             {
@@ -134,11 +143,11 @@
               "hasPermissionsBlock": false
             }
           ],
-          "totalUses": 86,
+          "totalUses": 97,
           "pinned": 0,
           "pinnedPct": 0,
           "hasPullRequestTarget": false,
-          "checkoutPersistFalse": false,
+          "checkoutPersistFalse": true,
           "hasPermissionsBlock": false
         },
         "security": {
@@ -213,7 +222,7 @@
           "CODEOWNERS",
           "dependabot.yml"
         ],
-        "reused": true
+        "reused": false
       }
     }
   ]
