@@ -146,12 +146,12 @@ jobs:
             }
 
             // Load existing issues (open + closed) for idempotency.
+            // Do NOT filter by label here: older runs may have created issues without labels.
             const existing = [];
             for await (const page of github.paginate.iterator(github.rest.issues.listForRepo, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'all',
-              labels: label,
               per_page: 100,
             })) {
               existing.push(...page.data);
@@ -160,7 +160,11 @@ jobs:
             const byTitle = new Map();
             for (const issue of existing) {
               if (issue.pull_request) continue;
-              byTitle.set(issue.title, issue);
+              const title = String(issue.title || '');
+              if (!title) continue;
+              const list = byTitle.get(title) || [];
+              list.push(issue);
+              byTitle.set(title, list);
             }
 
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
@@ -182,25 +186,56 @@ jobs:
                 `Workflow run: ${runUrl}`,
               ].join('\n');
 
-              const existingIssue = byTitle.get(title);
-              if (!existingIssue) {
-                await github.rest.issues.create({
+              const sameTitle = byTitle.get(title) || [];
+              // Prefer an open issue if one exists, else the most recent one.
+              const open = sameTitle.filter(i => i.state === 'open');
+              const pick = (open.length ? open : sameTitle).sort((a, b) => b.number - a.number)[0];
+
+              if (!pick) {
+                const created = await github.rest.issues.create({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   title,
                   body,
                   labels: [label],
                 });
+                // Force-add label (defensive) in case create didn't apply it.
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: created.data.number,
+                  labels: [label],
+                });
                 enqueued.push(full);
                 continue;
               }
 
-              // Re-open if it was closed, and refresh body.
-              if (existingIssue.state === 'closed') {
+              // Ensure the chosen issue has the backlog label.
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pick.number,
+                labels: [label],
+              });
+
+              // Close duplicates with same title (keep the picked one).
+              for (const other of sameTitle) {
+                if (other.number === pick.number) continue;
+                if (other.state !== 'open') continue;
                 await github.rest.issues.update({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  issue_number: existingIssue.number,
+                  issue_number: other.number,
+                  state: 'closed',
+                });
+              }
+
+              // Re-open if it was closed, and refresh body.
+              if (pick.state === 'closed') {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pick.number,
                   state: 'open',
                   body,
                 });
@@ -212,7 +247,7 @@ jobs:
               await github.rest.issues.update({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: existingIssue.number,
+                issue_number: pick.number,
                 body,
               });
             }
@@ -240,15 +275,27 @@ jobs:
             const label = process.env.BACKLOG_LABEL;
             const allowOrgs = String(process.env.ALLOW_ORGS || '').split(/[\s,]+/).filter(Boolean);
 
-            const issues = [];
-            for await (const page of github.paginate.iterator(github.rest.issues.listForRepo, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              labels: label,
-              per_page: 100,
-            })) {
-              issues.push(...page.data);
+            async function listBacklogIssues() {
+              const issues = [];
+              for await (const page of github.paginate.iterator(github.rest.issues.listForRepo, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                labels: label,
+                per_page: 100,
+              })) {
+                issues.push(...page.data);
+              }
+              return issues;
+            }
+
+            // Retry briefly to avoid eventual-consistency where a just-labeled issue isn't visible yet.
+            let issues = [];
+            for (let attempt = 1; attempt <= 4; attempt++) {
+              issues = await listBacklogIssues();
+              if (issues.length) break;
+              core.info(`Backlog list empty (attempt ${attempt}/4). Waiting...`);
+              await new Promise(r => setTimeout(r, 2000));
             }
 
             const repos = [];
@@ -296,7 +343,7 @@ jobs:
         with:
           github-token: ${{ env.GH_TOKEN }}
           script: |
-            const allowOrgs = (process.env.ORGS || '').split(/[\s,]+/).filter(Boolean);
+            const allowOrgs = (process.env.ORGS || '').split(/\s+/).filter(Boolean);
             const branches = String(process.env.BRANCHES || 'main,test,develop')
               .split(',').map(s => s.trim()).filter(Boolean);
             const contexts = String(process.env.REQUIRED_CONTEXTS || 'policy-check')
