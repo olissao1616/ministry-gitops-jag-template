@@ -1,21 +1,73 @@
-name: CI
+name: Template CI (smoke)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
     paths:
-      - '**/*.yaml'
-      - '**/*.tpl'
-      - '**/Chart.yaml'
+      - 'gitops-repo/**'
+      - 'application/**'
+      - 'charts/**'
+      - 'deploy/**'
+      - 'rbac/**'
+      - '.github/workflows/ci.yml'
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
+    paths:
+      - 'gitops-repo/**'
+      - 'application/**'
+      - 'charts/**'
+      - 'deploy/**'
+      - 'rbac/**'
+      - '.github/workflows/ci.yml'
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  POLICY_SOURCE_ORG: olissao1616
+  POLICY_SOURCE_REPO: ag-devops
+  POLICY_SOURCE_REF: main
 
 jobs:
-  lint-and-template:
+  generate:
+    name: Generate test GitOps repo
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Cookiecutter
+        run: pip install cookiecutter==2.6.0
+
+      - name: Generate test GitOps repo
+        run: |
+          rm -rf /tmp/cookiecutter-out
+          cookiecutter ./gitops-repo --no-input \
+            app_name=test-app \
+            licence_plate=abc123 \
+            github_org=bcgov-c \
+            --output-dir /tmp/cookiecutter-out
+
+      - name: Upload generated repo
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-gitops-repo
+          path: /tmp/cookiecutter-out/test-app-gitops
+          retention-days: 1
+
+  render:
+    name: Render (${{ matrix.env }})
+    needs: generate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [dev, test, prod]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,88 +76,123 @@ jobs:
         uses: azure/setup-helm@v4
         with:
           version: v3.14.4
-
-      - name: Helm version
-        run: helm version --short
-
-      - name: Lint library chart
-        run: |
-          helm lint ./shared-lib/ag-helm
 
       - name: Helm login to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
 
+      - name: Download generated repo
+        uses: actions/download-artifact@v4
+        with:
+          name: generated-gitops-repo
+          path: generated
 
-      - name: Build dependencies for example-app
+      - name: Render manifests
         run: |
-          helm dependency update ./shared-lib/example-app
+          cd generated/charts/gitops
+          helm dependency update
+          helm template test-app . \
+            --values ../../deploy/${{ matrix.env }}_values.yaml \
+            --namespace abc123-${{ matrix.env }} \
+            > /tmp/rendered-${{ matrix.env }}.yaml
+          echo "✓ Rendered $(wc -l < /tmp/rendered-${{ matrix.env }}.yaml) lines"
 
-      - name: Lint example-app
-        run: |
-          helm lint ./shared-lib/example-app
-
-      - name: Template example-app (values-examples.yaml)
-        run: |
-          helm template ex ./shared-lib/example-app --values ./shared-lib/example-app/values-examples.yaml --debug > ./example-app-render.yaml
-
-      - name: Upload render artifact
+      - name: Upload manifests
         uses: actions/upload-artifact@v4
         with:
-          name: example-app-render
-          path: ./example-app-render.yaml
+          name: rendered-${{ matrix.env }}
+          path: /tmp/rendered-${{ matrix.env }}.yaml
+          retention-days: 7
 
-  publish-helm-library:
+  conftest:
+    name: Conftest (${{ matrix.env }})
+    needs: render
     runs-on: ubuntu-latest
-    needs: lint-and-template
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
-    env:
-      CHART_DIR: ./shared-lib/ag-helm
-      CHART_NAME: ag-helm-templates
-      OCI_REGISTRY: ghcr.io/olissao1616/helm
+    strategy:
+      matrix:
+        env: [dev, test, prod]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Helm
-        uses: azure/setup-helm@v4
+      - name: Download policies (curl)
+        run: |
+          set -euo pipefail
+          mkdir -p .policy-cache
+          base="https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/${POLICY_SOURCE_REF}/cd/policies"
+          curl -fsSL "$base/network-policies.rego" -o .policy-cache/network-policies.rego
+          curl -fsSL "$base/avi-infrasetting-annotation.rego" -o .policy-cache/avi-infrasetting-annotation.rego
+          curl -fsSL "$base/routes-edge-termination.rego" -o .policy-cache/routes-edge-termination.rego
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
         with:
-          version: v3.14.4
+          name: rendered-${{ matrix.env }}
 
-      - name: Login to GHCR
-        uses: docker/login-action@v3
+      - name: Install Conftest
+        run: |
+          wget -q https://github.com/open-policy-agent/conftest/releases/download/v0.49.1/conftest_0.49.1_Linux_x86_64.tar.gz
+          tar xzf conftest_0.49.1_Linux_x86_64.tar.gz
+          sudo mv conftest /usr/local/bin/
+          conftest --version
+
+      - name: Run Conftest
+        run: |
+          conftest test rendered-${{ matrix.env }}.yaml \
+            --policy .policy-cache/ \
+            --all-namespaces \
+            --output table \
+            --fail-on-warn
+
+  kube-linter:
+    name: kube-linter (${{ matrix.env }})
+    needs: render
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [dev, test, prod]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download policies (curl)
+        run: |
+          set -euo pipefail
+          mkdir -p .policy-cache
+          base="https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/${POLICY_SOURCE_REF}/cd/policies"
+          curl -fsSL "$base/kube-linter.yaml" -o .policy-cache/kube-linter.yaml
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          name: rendered-${{ matrix.env }}
 
-      - name: Extract version and create development tag
-        id: version
+      - name: Install kube-linter
         run: |
-          VERSION=$(grep -E '^version:' ${CHART_DIR}/Chart.yaml | awk '{print $2}')
-          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          DEV_VERSION="${VERSION}-dev.${SHORT_SHA}"
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "dev_version=${DEV_VERSION}" >> $GITHUB_OUTPUT
-          echo "Publishing version: ${DEV_VERSION}"
+          wget -q https://github.com/stackrox/kube-linter/releases/download/v0.6.8/kube-linter-linux.tar.gz
+          tar -xzf kube-linter-linux.tar.gz
+          sudo mv kube-linter /usr/local/bin/
+          kube-linter version
 
-      - name: Update Chart.yaml with dev version
+      - name: Run kube-linter
         run: |
-          sed -i -E "s/^version: .*/version: ${{ steps.version.outputs.dev_version }}/" ${CHART_DIR}/Chart.yaml
-          cat ${CHART_DIR}/Chart.yaml
+          kube-linter lint rendered-${{ matrix.env }}.yaml --config .policy-cache/kube-linter.yaml
 
-      - name: Package chart
+  summary:
+    name: Summary
+    if: always()
+    needs:
+      - render
+      - conftest
+      - kube-linter
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write summary
         run: |
-          mkdir -p dist
-          helm lint ${CHART_DIR}
-          helm package ${CHART_DIR} -d dist
-          ls -l dist
-
-      - name: Push to OCI (dev version)
-        run: |
-          FILE=$(ls dist/${CHART_NAME}-*.tgz | head -n1)
-          echo "Pushing $FILE to oci://${OCI_REGISTRY}"
-          helm push "$FILE" oci://${OCI_REGISTRY}
-          echo "✅ Published: oci://${OCI_REGISTRY}/${CHART_NAME}:${{ steps.version.outputs.dev_version }}"
+          echo "# Template CI (smoke)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Cookiecutter -> Helm render (dev/test/prod) -> validators (Conftest, kube-linter)." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Job results" >> $GITHUB_STEP_SUMMARY
+          echo "- Render: ${{ needs.render.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Conftest: ${{ needs.conftest.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- kube-linter: ${{ needs.kube-linter.result }}" >> $GITHUB_STEP_SUMMARY
