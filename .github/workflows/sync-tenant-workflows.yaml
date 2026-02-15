@@ -179,6 +179,9 @@ jobs:
                   git push origin "${branch}"
                 fi
 
+                # Tenant repos should not carry the template repo's workflow-templates folder.
+                rm -rf .github/workflow-templates || true
+
                 # Overwrite mode: delete every other workflow YAML and keep only the approved ones.
                 if [ "${ENFORCE_ONLY}" = "true" ]; then
                   mkdir -p .github/workflows
@@ -208,8 +211,8 @@ jobs:
                   cp "${template_ci}" .github/workflows/ci.yml
                 fi
 
-                # Stage the whole workflows directory so deleted workflows are included.
-                git add -A .github/workflows
+                # Stage .github so deletions (like workflow-templates) are included.
+                git add -A .github
 
                 if git diff --cached --quiet; then
                   echo "No workflow changes for ${full}:${branch}"
