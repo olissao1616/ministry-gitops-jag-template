@@ -17,7 +17,7 @@ Note: Branch protection status may show ⚠ if the token cannot read protection 
 
 | Repo | Created | From template | main | test | develop | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| [olissao1616/test](https://github.com/olissao1616/test) | 2026-02-15T01:52:03Z | Yes | ❌ | ❌ | ❌ |  |
+| [olissao1616/test](https://github.com/olissao1616/test) | 2026-02-15T01:52:03Z | Yes | ✅ | ✅ | ✅ |  |
 
 Legend: ✅ protected, ❌ not protected, — branch missing, ⚠ unknown/insufficient permissions
 
@@ -31,6 +31,6 @@ Legend: ✅ protected, ❌ not protected, — branch missing, ⚠ unknown/insuff
 
 | Branch | Exists | Protection | Contexts | Strict | Approvals | Codeowners | Linear history | Conversation resolution | Admins enforced | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| main | Yes | ❌ | — | — | — | — | — | — | — | Not protected |
-| test | Yes | ❌ | — | — | — | — | — | — | — | Not protected |
-| develop | Yes | ❌ | — | — | — | — | — | — | — | Not protected |
+| main | Yes | ✅ | policy-check | Yes | 2 | Yes | Yes | Yes | Yes |  |
+| test | Yes | ✅ | policy-check | Yes | 2 | Yes | Yes | Yes | Yes |  |
+| develop | Yes | ✅ | policy-check | Yes | 2 | Yes | Yes | Yes | Yes |  |
