@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-15T03:22:53.248Z",
+  "generatedAt": "2026-02-15T05:34:59.797Z",
   "template": "olissao1616/ministry-gitops-jag-template",
   "owners": [
     "olissao1616"
@@ -14,10 +14,103 @@
     "develop"
   ],
   "newWithinHours": 2,
-  "reposScanned": 5,
-  "templateRepos": 1,
+  "reposScanned": 6,
+  "templateRepos": 2,
   "templateReposNewInWindow": 1,
   "repos": [
+    {
+      "full_name": "olissao1616/test222",
+      "url": "https://github.com/olissao1616/test222",
+      "created_at": "2026-02-15T05:16:45Z",
+      "from_template": true,
+      "default_branch": "main",
+      "checks": {
+        "codeowners": {
+          "status": "missing"
+        },
+        "dependabot": {
+          "status": "missing"
+        },
+        "actions": {
+          "status": "reported",
+          "workflows": [
+            {
+              "path": ".github/workflows/ci.yml",
+              "totalUses": 9,
+              "pinned": 0,
+              "pinnedPct": 0,
+              "hasPullRequestTarget": false,
+              "checkoutPersistFalse": false,
+              "hasPermissionsBlock": false
+            },
+            {
+              "path": ".github/workflows/validate-network-policies-comprehensive.yaml",
+              "totalUses": 28,
+              "pinned": 0,
+              "pinnedPct": 0,
+              "hasPullRequestTarget": false,
+              "checkoutPersistFalse": false,
+              "hasPermissionsBlock": false
+            },
+            {
+              "path": ".github/workflows/validate-network-policies.yaml",
+              "totalUses": 11,
+              "pinned": 0,
+              "pinnedPct": 0,
+              "hasPullRequestTarget": false,
+              "checkoutPersistFalse": false,
+              "hasPermissionsBlock": false
+            }
+          ],
+          "totalUses": 48,
+          "pinned": 0,
+          "pinnedPct": 0,
+          "hasPullRequestTarget": false,
+          "checkoutPersistFalse": false,
+          "hasPermissionsBlock": false
+        },
+        "security": {
+          "status": "reported",
+          "securityPolicy": "missing",
+          "vulnerabilityAlerts": false,
+          "automatedSecurityFixes": true,
+          "securityAndAnalysis": {
+            "status": "reported",
+            "advancedSecurity": null,
+            "secretScanning": true,
+            "secretScanningPushProtection": true,
+            "dependabotSecurityUpdates": false
+          }
+        },
+        "branchProtection": {
+          "status": "unknown",
+          "branches": {
+            "main": {
+              "exists": true,
+              "status": "unprotected"
+            },
+            "test": {
+              "exists": true,
+              "status": "unprotected"
+            },
+            "develop": {
+              "exists": true,
+              "status": "unprotected"
+            }
+          }
+        }
+      },
+      "autofix": {
+        "attempted": true,
+        "prUrl": "https://github.com/olissao1616/test222/pull/1",
+        "reason": null,
+        "fixes": [
+          "CODEOWNERS",
+          "dependabot.yml"
+        ],
+        "reused": false
+      }
+    },
     {
       "full_name": "olissao1616/test",
       "url": "https://github.com/olissao1616/test",
@@ -222,7 +315,7 @@
           "CODEOWNERS",
           "dependabot.yml"
         ],
-        "reused": false
+        "reused": true
       }
     }
   ]
