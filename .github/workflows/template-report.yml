@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   generate:
@@ -92,54 +93,235 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  protect:
-    name: Apply branch protection
+      - name: Enqueue newly-created repos (persistent backlog)
+        if: ${{ steps.detect.outputs.has_new_repos == 'true' }}
+        uses: actions/github-script@v7
+        env:
+          GH_TOKEN: ${{ env.GH_TOKEN }}
+          NEW_JSON_FILE: ${{ env.NEW_JSON_FILE }}
+          ALLOW_ORGS: ${{ env.PROTECT_ORGS }}
+          BACKLOG_LABEL: pending-template-onboarding
+        with:
+          github-token: ${{ env.GH_TOKEN }}
+          script: |
+            const fs = require('fs');
+
+            const label = process.env.BACKLOG_LABEL;
+            const allowOrgs = String(process.env.ALLOW_ORGS || '').split(/\s+/).filter(Boolean);
+            const filePath = process.env.NEW_JSON_FILE;
+
+            if (!filePath || !fs.existsSync(filePath)) {
+              core.info('No new repo JSON file found; nothing to enqueue.');
+              return;
+            }
+
+            const payload = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            const repos = Array.isArray(payload.repos) ? payload.repos : [];
+            if (!repos.length) {
+              core.info('No newly-created repos detected; nothing to enqueue.');
+              return;
+            }
+
+            // Ensure backlog label exists.
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label,
+              });
+            } catch (err) {
+              const status = err?.status ?? err?.response?.status;
+              if (status === 404) {
+                core.info(`Creating label '${label}'`);
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label,
+                  color: '0366d6',
+                  description: 'Repos pending sync/protect tenant workflow onboarding',
+                });
+              } else {
+                throw err;
+              }
+            }
+
+            // Load existing issues (open + closed) for idempotency.
+            const existing = [];
+            for await (const page of github.paginate.iterator(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              labels: label,
+              per_page: 100,
+            })) {
+              existing.push(...page.data);
+            }
+
+            const byTitle = new Map();
+            for (const issue of existing) {
+              if (issue.pull_request) continue;
+              byTitle.set(issue.title, issue);
+            }
+
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const enqueued = [];
+
+            for (const full of repos) {
+              if (typeof full !== 'string' || !full.includes('/')) continue;
+              const [owner] = full.split('/', 1);
+
+              if (allowOrgs.length && !allowOrgs.includes(owner)) {
+                core.info(`Skipping enqueue for ${full} (owner not in allowlist)`);
+                continue;
+              }
+
+              const title = full; // keep it machine-parseable
+              const body = [
+                `Repository pending onboarding: ${full}`,
+                `Last detected: ${new Date().toISOString()}`,
+                `Workflow run: ${runUrl}`,
+              ].join('\n');
+
+              const existingIssue = byTitle.get(title);
+              if (!existingIssue) {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title,
+                  body,
+                  labels: [label],
+                });
+                enqueued.push(full);
+                continue;
+              }
+
+              // Re-open if it was closed, and refresh body.
+              if (existingIssue.state === 'closed') {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existingIssue.number,
+                  state: 'open',
+                  body,
+                });
+                enqueued.push(full);
+                continue;
+              }
+
+              // Already open: just update body to keep it fresh.
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body,
+              });
+            }
+
+            core.info(`Backlog updated. Enqueued/refreshed: ${enqueued.length}`);
+
+  backlog:
+    name: Load onboarding backlog
     needs: generate
     runs-on: ubuntu-latest
+    outputs:
+      count: ${{ steps.load.outputs.count }}
+      repos_b64: ${{ steps.load.outputs.repos_b64 }}
+    env:
+      GH_TOKEN: ${{ secrets.CI || secrets.GHCR_PAT }}
+      BACKLOG_LABEL: pending-template-onboarding
+      ALLOW_ORGS: ${{ vars.TEMPLATE_PROTECT_ORGS || vars.TEMPLATE_REPORT_ORGS || 'olissao1616' }}
+    steps:
+      - name: Load backlog issues
+        id: load
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ env.GH_TOKEN }}
+          script: |
+            const label = process.env.BACKLOG_LABEL;
+            const allowOrgs = String(process.env.ALLOW_ORGS || '').split(/\s+/).filter(Boolean);
+
+            const issues = [];
+            for await (const page of github.paginate.iterator(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: label,
+              per_page: 100,
+            })) {
+              issues.push(...page.data);
+            }
+
+            const repos = [];
+            for (const issue of issues) {
+              if (issue.pull_request) continue;
+              const title = String(issue.title || '');
+              if (!title.includes('/')) continue;
+              const [owner] = title.split('/', 1);
+              if (allowOrgs.length && !allowOrgs.includes(owner)) continue;
+              repos.push(title);
+            }
+
+            repos.sort();
+            const reposB64 = Buffer.from(JSON.stringify(repos), 'utf8').toString('base64');
+
+            core.setOutput('count', String(repos.length));
+            core.setOutput('repos_b64', reposB64);
+            core.info(`Backlog repos: ${repos.length}`);
+
+  protect:
+    name: Apply branch protection
+    needs: [backlog, sync_validation]
+    if: ${{ needs.backlog.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    outputs:
+      ok_repos_b64: ${{ steps.protect.outputs.ok_repos_b64 }}
+      failed_repos_b64: ${{ steps.protect.outputs.failed_repos_b64 }}
+      skipped_repos_b64: ${{ steps.protect.outputs.skipped_repos_b64 }}
+      details_b64: ${{ steps.protect.outputs.details_b64 }}
     env:
       GH_TOKEN: ${{ secrets.CI || secrets.GHCR_PAT }}
       PROTECT_ORGS: ${{ vars.TEMPLATE_PROTECT_ORGS || vars.TEMPLATE_REPORT_ORGS || 'olissao1616' }}
       PROTECT_BRANCHES: ${{ vars.TEMPLATE_PROTECT_BRANCHES || 'main,test,develop' }}
       REQUIRED_CONTEXTS: ${{ vars.TEMPLATE_REQUIRED_CONTEXTS || 'policy-check' }}
-      NEW_JSON_FILE: ${{ vars.TEMPLATE_NEW_JSON_FILE || 'reports/new-template-repos.json' }}
+      REPOS_B64: ${{ needs.backlog.outputs.repos_b64 }}
     steps:
-      - name: Download report artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: template-report-out
-
-      - name: Apply branch protection to newly created template repos
+      - name: Apply branch protection to backlog repos
+        id: protect
         uses: actions/github-script@v7
         env:
           ORGS: ${{ env.PROTECT_ORGS }}
           BRANCHES: ${{ env.PROTECT_BRANCHES }}
           REQUIRED_CONTEXTS: ${{ env.REQUIRED_CONTEXTS }}
-          NEW_JSON_FILE: ${{ env.NEW_JSON_FILE }}
+          REPOS_B64: ${{ env.REPOS_B64 }}
         with:
           github-token: ${{ env.GH_TOKEN }}
           script: |
-            const fs = require('fs');
-            const path = process.env.NEW_JSON_FILE;
             const allowOrgs = (process.env.ORGS || '').split(/\s+/).filter(Boolean);
             const branches = String(process.env.BRANCHES || 'main,test,develop')
               .split(',').map(s => s.trim()).filter(Boolean);
             const contexts = String(process.env.REQUIRED_CONTEXTS || 'policy-check')
               .split(',').map(s => s.trim()).filter(Boolean);
 
-            if (!path || !fs.existsSync(path)) {
-              core.info('No new repo JSON file found; skipping protection.');
+            const reposB64 = String(process.env.REPOS_B64 || '');
+            if (!reposB64) {
+              core.info('No backlog repos provided; skipping protection.');
               return;
             }
 
-            const payload = JSON.parse(fs.readFileSync(path, 'utf8'));
-            const repos = Array.isArray(payload.repos) ? payload.repos : [];
+            const repos = JSON.parse(Buffer.from(reposB64, 'base64').toString('utf8'));
 
             if (!repos.length) {
-              core.info('No newly-created repos detected; nothing to protect.');
+              core.info('No backlog repos detected; nothing to protect.');
               return;
             }
 
-            core.info(`New repos detected: ${repos.join(', ')}`);
+            core.info(`Backlog repos detected: ${repos.join(', ')}`);
+
+            // Policy: 404/422 are treated as SKIPS and kept in backlog (not auto-closed).
+            const okRepos = [];
+            const failedRepos = [];
+            const skippedRepos = [];
+            const details = {}; // repo -> { failed: [{branch,status,message}], skipped: [...] }
 
             for (const full of repos) {
               if (typeof full !== 'string' || !full.includes('/')) continue;
@@ -177,28 +359,247 @@ jobs:
                   const status = err?.status ?? err?.response?.status;
                   const message = err?.message || String(err);
 
+                  if (!details[full]) details[full] = { failed: [], skipped: [] };
+
                   if (status === 404 || status === 422) {
-                    core.warning(`Skipped ${full}:${branch} (${status}): ${message}`);
+                    const shortMsg = String(message).slice(0, 300);
+                    details[full].skipped.push({ branch, status, message: shortMsg });
+                    core.warning(`Skipped ${full}:${branch} (${status}): ${shortMsg}`);
                     continue;
                   }
 
-                  core.warning(`Failed ${full}:${branch} (${status ?? 'unknown'}): ${message}`);
+                  const shortMsg = String(message).slice(0, 300);
+                  details[full].failed.push({ branch, status: status ?? 'unknown', message: shortMsg });
+                  core.warning(`Failed ${full}:${branch} (${status ?? 'unknown'}): ${shortMsg}`);
                 }
               }
+
+              const repoDetail = details[full];
+              if (repoDetail?.failed?.length) {
+                failedRepos.push(full);
+              } else if (repoDetail?.skipped?.length) {
+                skippedRepos.push(full);
+              } else {
+                okRepos.push(full);
+              }
+            }
+
+            okRepos.sort();
+            failedRepos.sort();
+            skippedRepos.sort();
+
+            core.setOutput('ok_repos_b64', Buffer.from(JSON.stringify(okRepos), 'utf8').toString('base64'));
+            core.setOutput('failed_repos_b64', Buffer.from(JSON.stringify(failedRepos), 'utf8').toString('base64'));
+            core.setOutput('skipped_repos_b64', Buffer.from(JSON.stringify(skippedRepos), 'utf8').toString('base64'));
+            core.setOutput('details_b64', Buffer.from(JSON.stringify(details), 'utf8').toString('base64'));
+
+            if (failedRepos.length) {
+              core.setFailed(`Branch protection failed for ${failedRepos.length} repo(s): ${failedRepos.join(', ')}`);
             }
 
   sync_validation:
     name: Sync tenant validation workflows
-    needs: generate
-    if: ${{ needs.generate.outputs.has_new_repos == 'true' }}
+    needs: backlog
+    if: ${{ needs.backlog.outputs.count != '0' }}
     uses: ./.github/workflows/sync-tenant-workflows.yaml
     with:
-      repos_b64: ${{ needs.generate.outputs.repos_b64 }}
+      repos_b64: ${{ needs.backlog.outputs.repos_b64 }}
       branches: ${{ vars.TEMPLATE_PROTECT_BRANCHES || 'main,test,develop' }}
       allow_orgs: ${{ vars.TEMPLATE_PROTECT_ORGS || vars.TEMPLATE_REPORT_ORGS || 'olissao1616' }}
       copy_ci: true
       enforce_only: true
     secrets: inherit
+
+  backlog_update:
+    name: Update/close backlog issues
+    needs: [backlog, sync_validation, protect]
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      ok_count: ${{ steps.update.outputs.ok_count }}
+      failed_count: ${{ steps.update.outputs.failed_count }}
+      skipped_count: ${{ steps.update.outputs.skipped_count }}
+      updated_count: ${{ steps.update.outputs.updated_count }}
+      closed_count: ${{ steps.update.outputs.closed_count }}
+    env:
+      GH_TOKEN: ${{ secrets.CI || secrets.GHCR_PAT }}
+      BACKLOG_LABEL: pending-template-onboarding
+      REPOS_B64: ${{ needs.backlog.outputs.repos_b64 }}
+      SYNC_OK_B64: ${{ needs.sync_validation.outputs.ok_repos_b64 }}
+      SYNC_FAILED_B64: ${{ needs.sync_validation.outputs.failed_repos_b64 }}
+      SYNC_RESULTS_B64: ${{ needs.sync_validation.outputs.results_b64 }}
+      PROTECT_OK_B64: ${{ needs.protect.outputs.ok_repos_b64 }}
+      PROTECT_FAILED_B64: ${{ needs.protect.outputs.failed_repos_b64 }}
+      PROTECT_SKIPPED_B64: ${{ needs.protect.outputs.skipped_repos_b64 }}
+      PROTECT_DETAILS_B64: ${{ needs.protect.outputs.details_b64 }}
+    steps:
+      - name: Update backlog issues with results and close successes
+        if: ${{ needs.backlog.outputs.count != '0' }}
+        id: update
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ env.GH_TOKEN }}
+          script: |
+            const label = process.env.BACKLOG_LABEL;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const decodeList = (b64) => {
+              const s = String(b64 || '');
+              if (!s) return [];
+              try {
+                return JSON.parse(Buffer.from(s, 'base64').toString('utf8')) || [];
+              } catch {
+                return [];
+              }
+            };
+            const decodeObj = (b64) => {
+              const s = String(b64 || '');
+              if (!s) return {};
+              try {
+                return JSON.parse(Buffer.from(s, 'base64').toString('utf8')) || {};
+              } catch {
+                return {};
+              }
+            };
+
+            const backlogRepos = decodeList(process.env.REPOS_B64);
+            const syncOk = new Set(decodeList(process.env.SYNC_OK_B64));
+            const syncFailed = new Set(decodeList(process.env.SYNC_FAILED_B64));
+            const syncResults = decodeList(process.env.SYNC_RESULTS_B64);
+
+            const protectOk = new Set(decodeList(process.env.PROTECT_OK_B64));
+            const protectFailed = new Set(decodeList(process.env.PROTECT_FAILED_B64));
+            const protectSkipped = new Set(decodeList(process.env.PROTECT_SKIPPED_B64));
+            const protectDetails = decodeObj(process.env.PROTECT_DETAILS_B64);
+
+            const syncErrByRepo = new Map();
+            for (const r of syncResults) {
+              if (r && r.repo && r.status === 'failed' && r.error) syncErrByRepo.set(r.repo, r.error);
+            }
+
+            const finalOk = [];
+            const finalFailed = [];
+            const finalSkipped = [];
+            const finalPending = [];
+
+            for (const repo of backlogRepos) {
+              const sOk = syncOk.has(repo);
+              const sFail = syncFailed.has(repo);
+              const pOk = protectOk.has(repo);
+              const pFail = protectFailed.has(repo);
+              const pSkip = protectSkipped.has(repo);
+
+              // Success is strictly: synced OK + protected OK.
+              if (sOk && pOk) {
+                finalOk.push(repo);
+              } else if (sFail || pFail) {
+                finalFailed.push(repo);
+              } else if (pSkip) {
+                finalSkipped.push(repo);
+              } else {
+                finalPending.push(repo);
+              }
+            }
+
+            // Basic retry wrapper for API operations.
+            async function withRetry(fn, attempts = 4, baseMs = 800) {
+              let lastErr;
+              for (let i = 0; i < attempts; i++) {
+                try { return await fn(); } catch (e) {
+                  lastErr = e;
+                  const status = e?.status ?? e?.response?.status;
+                  const retryable = [403, 408, 429, 500, 502, 503, 504].includes(status);
+                  if (!retryable || i === attempts - 1) throw e;
+                  const delay = baseMs * Math.pow(2, i);
+                  await new Promise(r => setTimeout(r, delay));
+                }
+              }
+              throw lastErr;
+            }
+
+            // Load open backlog issues once.
+            const issues = [];
+            for await (const page of github.paginate.iterator(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: label,
+              per_page: 100,
+            })) {
+              issues.push(...page.data);
+            }
+            const byTitle = new Map();
+            for (const issue of issues) {
+              if (issue.pull_request) continue;
+              byTitle.set(String(issue.title || ''), issue);
+            }
+
+            const now = new Date().toISOString();
+            let closed = 0;
+            let updated = 0;
+
+            for (const repo of backlogRepos) {
+              const issue = byTitle.get(repo);
+              if (!issue) continue;
+
+              let statusLine = 'PENDING';
+              if (finalOk.includes(repo)) statusLine = 'SUCCESS';
+              else if (finalFailed.includes(repo)) statusLine = 'FAILED';
+              else if (finalSkipped.includes(repo)) statusLine = 'SKIPPED (kept in backlog)';
+
+              const protectInfo = protectDetails?.[repo];
+              const protectFailedBranches = Array.isArray(protectInfo?.failed) ? protectInfo.failed : [];
+              const protectSkippedBranches = Array.isArray(protectInfo?.skipped) ? protectInfo.skipped : [];
+              const syncErr = syncErrByRepo.get(repo);
+
+              const lines = [
+                `Repository pending onboarding: ${repo}`,
+                `Last processed: ${now}`,
+                `Status: ${statusLine}`,
+                `Workflow run: ${runUrl}`,
+              ];
+              if (syncErr) lines.push(`Sync error: ${String(syncErr).slice(0, 900)}`);
+              if (protectFailedBranches.length) {
+                lines.push('Protection failures:');
+                for (const f of protectFailedBranches.slice(0, 8)) {
+                  lines.push(`- ${f.branch}: ${f.status} ${String(f.message || '').slice(0, 200)}`);
+                }
+              }
+              if (protectSkippedBranches.length) {
+                lines.push('Protection skips (kept in backlog):');
+                for (const s of protectSkippedBranches.slice(0, 8)) {
+                  lines.push(`- ${s.branch}: ${s.status} ${String(s.message || '').slice(0, 200)}`);
+                }
+              }
+
+              const body = lines.join('\n');
+
+              await withRetry(() => github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body,
+              }));
+              updated++;
+
+              if (finalOk.includes(repo)) {
+                await withRetry(() => github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'closed',
+                }));
+                closed++;
+              }
+            }
+
+            core.setOutput('ok_count', String(finalOk.length));
+            core.setOutput('failed_count', String(finalFailed.length));
+            core.setOutput('skipped_count', String(finalSkipped.length));
+            core.setOutput('updated_count', String(updated));
+            core.setOutput('closed_count', String(closed));
+
+            core.info(`Backlog issues updated: ${updated}. Closed: ${closed}.`);
 
   persist:
     name: Persist report to repo
@@ -223,14 +624,14 @@ jobs:
       - name: Persist report (overwrite)
         shell: bash
         env:
-          PUSH_TOKEN: ${{ github.token }}
+          PUSH_TOKEN: ${{ secrets.CI || secrets.GHCR_PAT }}
         run: |
           set -euo pipefail
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
 
           if [ -z "${PUSH_TOKEN:-}" ]; then
-            echo "Missing PUSH_TOKEN (github.token)" >&2
+            echo "Missing PUSH_TOKEN (secrets.CI or secrets.GHCR_PAT)" >&2
             exit 1
           fi
           git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
@@ -240,7 +641,15 @@ jobs:
           git checkout -B "${BRANCH}" "origin/${BRANCH}"
 
           mkdir -p reports
-          # Artifact download preserves paths; these should now exist in the workspace.
+          # Artifact download usually preserves paths, but some setups flatten; handle both.
+          if [ ! -f reports/template-usage-report.md ] && [ -f template-usage-report.md ]; then
+            mv template-usage-report.md reports/template-usage-report.md
+          fi
+          if [ ! -f "${NEW_JSON_FILE}" ] && [ -f "$(basename "${NEW_JSON_FILE}")" ]; then
+            mkdir -p "$(dirname "${NEW_JSON_FILE}")"
+            mv "$(basename "${NEW_JSON_FILE}")" "${NEW_JSON_FILE}"
+          fi
+
           test -f reports/template-usage-report.md || true
           test -f "${NEW_JSON_FILE}" || true
 
@@ -260,7 +669,7 @@ jobs:
 
   summary:
     name: Summary
-    needs: [generate, sync_validation, protect, persist]
+    needs: [generate, backlog, sync_validation, protect, backlog_update, persist]
     if: always()
     runs-on: ubuntu-latest
     env:
@@ -276,9 +685,17 @@ jobs:
           echo "Owners scanned: ${ORGS}" >> "$GITHUB_STEP_SUMMARY"
           echo "Branches checked: ${PROTECT_BRANCHES:-<unset>}" >> "$GITHUB_STEP_SUMMARY"
           echo "New repos detected: ${{ needs.generate.outputs.new_repo_count }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Backlog count: ${{ needs.backlog.outputs.count }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Processed OK (closed): ${{ needs.backlog_update.outputs.ok_count || '0' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Processed failed (kept): ${{ needs.backlog_update.outputs.failed_count || '0' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Processed skipped (kept): ${{ needs.backlog_update.outputs.skipped_count || '0' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Skip policy: 404/422 during protection are treated as SKIPPED and kept in backlog for retry." >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "## Job results" >> "$GITHUB_STEP_SUMMARY"
           echo "- Generate: ${{ needs.generate.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Backlog: ${{ needs.backlog.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Sync validation: ${{ needs.sync_validation.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Protect: ${{ needs.protect.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Backlog update: ${{ needs.backlog_update.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Persist: ${{ needs.persist.result }}" >> "$GITHUB_STEP_SUMMARY"

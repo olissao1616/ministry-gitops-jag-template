@@ -27,6 +27,16 @@ on:
         required: false
         default: false
         type: boolean
+    outputs:
+      ok_repos_b64:
+        description: Base64-encoded JSON array of repos that synced successfully.
+        value: ${{ jobs.sync.outputs.ok_repos_b64 }}
+      failed_repos_b64:
+        description: Base64-encoded JSON array of repos that failed to sync.
+        value: ${{ jobs.sync.outputs.failed_repos_b64 }}
+      results_b64:
+        description: Base64-encoded JSON array with per-repo status and error snippets.
+        value: ${{ jobs.sync.outputs.results_b64 }}
 
   workflow_dispatch:
     inputs:
@@ -62,6 +72,10 @@ jobs:
   sync:
     name: Sync workflows
     runs-on: ubuntu-latest
+    outputs:
+      ok_repos_b64: ${{ steps.sync_run.outputs.ok_repos_b64 }}
+      failed_repos_b64: ${{ steps.sync_run.outputs.failed_repos_b64 }}
+      results_b64: ${{ steps.sync_run.outputs.results_b64 }}
     env:
       GH_TOKEN: ${{ secrets.CI || secrets.GHCR_PAT }}
       BRANCHES: ${{ inputs.branches || github.event.inputs.branches || 'main,develop,test' }}
@@ -101,6 +115,7 @@ jobs:
           echo "count=$(cat repos.count)" >> "$GITHUB_OUTPUT"
 
       - name: Sync workflows to tenant repos
+        id: sync_run
         if: ${{ steps.decode.outputs.count != '0' }}
         shell: bash
         run: |
@@ -129,11 +144,20 @@ jobs:
 
           node -e "const repos=JSON.parse(require('fs').readFileSync('repos.json','utf8')); for(const r of repos){ console.log(r); }" > repos.txt
 
+          # Collect per-repo results so callers can close backlog items individually.
+          : > ok.repos
+          : > failed.repos
+          : > results.jsonl
+
           while IFS= read -r full; do
             [ -z "${full}" ] && continue
 
             if [[ "${full}" != */* ]]; then
               echo "Skipping invalid repo: ${full}" >&2
+              printf '{"repo":%s,"status":"skipped","error":%s}\n' \
+                "$(node -e "process.stdout.write(JSON.stringify(process.argv[1]))" "${full}")" \
+                "$(node -e "process.stdout.write(JSON.stringify(process.argv[1]))" "invalid repo format")" \
+                >> results.jsonl
               continue
             fi
 
@@ -147,6 +171,10 @@ jobs:
               done
               if [ "${ok}" != "true" ]; then
                 echo "Skipping ${full} (owner not in allowlist)"
+                printf '{"repo":%s,"status":"skipped","error":%s}\n' \
+                  "$(node -e "process.stdout.write(JSON.stringify(process.argv[1]))" "${full}")" \
+                  "$(node -e "process.stdout.write(JSON.stringify(process.argv[1]))" "owner not in allowlist")" \
+                  >> results.jsonl
                 continue
               fi
             fi
@@ -154,76 +182,136 @@ jobs:
             echo "Syncing workflows -> ${full}"
 
             workdir="$(mktemp -d)"
-            (
-              set -euo pipefail
-              cd "${workdir}"
-              GIT_TERMINAL_PROMPT=0 git clone "https://x-access-token:${GH_TOKEN}@github.com/${full}.git" repo
+            repo_status="ok"
+            repo_error=""
+            start_dir="$(pwd)"
+
+            cd "${workdir}"
+
+            # Clone
+            if ! GIT_TERMINAL_PROMPT=0 git clone "https://x-access-token:${GH_TOKEN}@github.com/${full}.git" repo 2>clone.err; then
+              echo "Clone failed for ${full}" >&2
+              repo_status="failed"
+              repo_error="clone failed: $(tail -n 20 clone.err | tr '\n' ' ' | sed 's/\r//g' | head -c 900)"
+            else
               cd repo
 
               # Ensure we can base other branches off main.
               if ! git ls-remote --exit-code --heads origin main >/dev/null 2>&1; then
                 echo "Skipping ${full}: main branch not found" >&2
-                exit 0
-              fi
-              git fetch --no-tags origin
+                repo_status="skipped"
+                repo_error="main branch not found"
+              else
+                git fetch --no-tags origin
 
-              for branch in "${branches[@]}"; do
-                branch="$(echo "${branch}" | xargs)"
-                [ -z "${branch}" ] && continue
+                for branch in "${branches[@]}"; do
+                  branch="$(echo "${branch}" | xargs)"
+                  [ -z "${branch}" ] && continue
 
-                if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
-                  git checkout -B "${branch}" "origin/${branch}"
-                else
-                  echo "Creating missing branch ${full}:${branch} from main"
-                  git checkout -B "${branch}" "origin/main"
-                  git push origin "${branch}"
-                fi
-
-                # Overwrite mode: delete every other workflow YAML and keep only the approved ones.
-                if [ "${ENFORCE_ONLY}" = "true" ]; then
-                  mkdir -p .github/workflows
-
-                  keep=("validate-network-policies.yaml" "validate-network-policies-comprehensive.yaml")
-                  if [ "${COPY_CI}" = "true" ]; then
-                    keep+=("ci.yml")
+                  if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
+                    if ! git checkout -B "${branch}" "origin/${branch}" 2>checkout.err; then
+                      repo_status="failed"
+                      repo_error="checkout failed (${branch}): $(tail -n 20 checkout.err | tr '\n' ' ' | sed 's/\r//g' | head -c 900)"
+                      break
+                    fi
+                  else
+                    echo "Creating missing branch ${full}:${branch} from main"
+                    if ! git checkout -B "${branch}" "origin/main" 2>create.err; then
+                      repo_status="failed"
+                      repo_error="create branch failed (${branch}): $(tail -n 20 create.err | tr '\n' ' ' | sed 's/\r//g' | head -c 900)"
+                      break
+                    fi
+                    if ! git push origin "${branch}" 2>push-branch.err; then
+                      repo_status="failed"
+                      repo_error="push branch failed (${branch}): $(tail -n 20 push-branch.err | tr '\n' ' ' | sed 's/\r//g' | head -c 900)"
+                      break
+                    fi
                   fi
 
-                  shopt -s nullglob
-                  for f in .github/workflows/*.yml .github/workflows/*.yaml; do
-                    bn="$(basename "${f}")"
-                    keep_it=false
-                    for k in "${keep[@]}"; do
-                      if [ "${bn}" = "${k}" ]; then keep_it=true; fi
-                    done
-                    if [ "${keep_it}" != "true" ]; then
-                      rm -f "${f}"
+                  # Tenant repos should not carry the template repo's workflow-templates folder.
+                  rm -rf .github/workflow-templates || true
+
+                  # Overwrite mode: delete every other workflow YAML and keep only the approved ones.
+                  if [ "${ENFORCE_ONLY}" = "true" ]; then
+                    mkdir -p .github/workflows
+
+                    keep=("validate-network-policies.yaml" "validate-network-policies-comprehensive.yaml")
+                    if [ "${COPY_CI}" = "true" ]; then
+                      keep+=("ci.yml")
                     fi
-                  done
-                fi
 
-                mkdir -p .github/workflows
-                cp "${template_validate_np}" .github/workflows/validate-network-policies.yaml
-                cp "${template_validate_np_comp}" .github/workflows/validate-network-policies-comprehensive.yaml
-                if [ "${COPY_CI}" = "true" ]; then
-                  cp "${template_ci}" .github/workflows/ci.yml
-                fi
+                    shopt -s nullglob
+                    for f in .github/workflows/*.yml .github/workflows/*.yaml; do
+                      bn="$(basename "${f}")"
+                      keep_it=false
+                      for k in "${keep[@]}"; do
+                        if [ "${bn}" = "${k}" ]; then keep_it=true; fi
+                      done
+                      if [ "${keep_it}" != "true" ]; then
+                        rm -f "${f}"
+                      fi
+                    done
+                  fi
 
-                # Stage the whole workflows directory so deleted workflows are included.
-                git add -A .github/workflows
+                  mkdir -p .github/workflows
+                  cp "${template_validate_np}" .github/workflows/validate-network-policies.yaml
+                  cp "${template_validate_np_comp}" .github/workflows/validate-network-policies-comprehensive.yaml
+                  if [ "${COPY_CI}" = "true" ]; then
+                    cp "${template_ci}" .github/workflows/ci.yml
+                  fi
 
-                if git diff --cached --quiet; then
-                  echo "No workflow changes for ${full}:${branch}"
-                  continue
-                fi
+                  # Stage .github so deletions (like workflow-templates) are included.
+                  git add -A .github
 
-                git commit -m "[skip ci] chore(ci): sync validation workflows"
-                git push origin "${branch}"
-                echo "✓ Updated ${full}:${branch}"
-              done
-            )
+                  if git diff --cached --quiet; then
+                    echo "No workflow changes for ${full}:${branch}"
+                    continue
+                  fi
 
+                  if ! git commit -m "[skip ci] chore(ci): sync validation workflows" 2>commit.err; then
+                    repo_status="failed"
+                    repo_error="commit failed (${branch}): $(tail -n 20 commit.err | tr '\n' ' ' | sed 's/\r//g' | head -c 900)"
+                    break
+                  fi
+                  if ! git push origin "${branch}" 2>push.err; then
+                    repo_status="failed"
+                    repo_error="push failed (${branch}): $(tail -n 20 push.err | tr '\n' ' ' | sed 's/\r//g' | head -c 900)"
+                    break
+                  fi
+                  echo "✓ Updated ${full}:${branch}"
+                done
+              fi
+            fi
+
+            cd "${start_dir}"
             rm -rf "${workdir}"
+
+            if [ "${repo_status}" = "ok" ]; then
+              echo "${full}" >> ok.repos
+              printf '{"repo":%s,"status":"ok"}\n' \
+                "$(node -e "process.stdout.write(JSON.stringify(process.argv[1]))" "${full}")" \
+                >> results.jsonl
+            elif [ "${repo_status}" = "skipped" ]; then
+              printf '{"repo":%s,"status":"skipped","error":%s}\n' \
+                "$(node -e "process.stdout.write(JSON.stringify(process.argv[1]))" "${full}")" \
+                "$(node -e "process.stdout.write(JSON.stringify(process.argv[1]))" "${repo_error}")" \
+                >> results.jsonl
+            else
+              echo "${full}" >> failed.repos
+              printf '{"repo":%s,"status":"failed","error":%s}\n' \
+                "$(node -e "process.stdout.write(JSON.stringify(process.argv[1]))" "${full}")" \
+                "$(node -e "process.stdout.write(JSON.stringify(process.argv[1]))" "${repo_error}")" \
+                >> results.jsonl
+            fi
           done < repos.txt
+
+          ok_b64="$(node -e "const fs=require('fs'); const a=fs.existsSync('ok.repos')?fs.readFileSync('ok.repos','utf8').split(/\r?\n/).filter(Boolean):[]; process.stdout.write(Buffer.from(JSON.stringify(a),'utf8').toString('base64'));" )"
+          failed_b64="$(node -e "const fs=require('fs'); const a=fs.existsSync('failed.repos')?fs.readFileSync('failed.repos','utf8').split(/\r?\n/).filter(Boolean):[]; process.stdout.write(Buffer.from(JSON.stringify(a),'utf8').toString('base64'));" )"
+          results_b64="$(node -e "const fs=require('fs'); const lines=fs.existsSync('results.jsonl')?fs.readFileSync('results.jsonl','utf8').split(/\r?\n/).filter(Boolean):[]; const a=lines.map(l=>{ try{return JSON.parse(l);}catch(e){return null;} }).filter(Boolean); process.stdout.write(Buffer.from(JSON.stringify(a),'utf8').toString('base64'));" )"
+
+          echo "ok_repos_b64=${ok_b64}" >> "$GITHUB_OUTPUT"
+          echo "failed_repos_b64=${failed_b64}" >> "$GITHUB_OUTPUT"
+          echo "results_b64=${results_b64}" >> "$GITHUB_OUTPUT"
 
       - name: Summary
         if: always()
