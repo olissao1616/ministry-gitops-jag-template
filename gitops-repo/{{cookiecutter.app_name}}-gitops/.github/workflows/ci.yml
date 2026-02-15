@@ -1,18 +1,21 @@
-name: Validate Template Output (Network Policies)
+{% raw %}name: CI (generated repo)
 
 on:
   push:
-    branches: [main, develop]
-    paths:
-      - 'gitops-repo/**'
-      - 'policies/**'
-      - '.github/workflows/validate-network-policies.yaml'
+    branches: [main, develop, test]
+    paths: ['charts/**', 'deploy/**', 'argocd/**', '.github/workflows/**']
   pull_request:
     branches: [main, develop]
-    paths:
-      - 'gitops-repo/**'
-      - 'policies/**'
-      - '.github/workflows/validate-network-policies.yaml'
+    paths: ['charts/**', 'deploy/**', 'argocd/**', '.github/workflows/**']
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: generated-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   POLICY_SOURCE_ORG: olissao1616
@@ -20,40 +23,8 @@ env:
   POLICY_SOURCE_REF: main
 
 jobs:
-  generate:
-    name: Generate test GitOps repo
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Cookiecutter
-        run: pip install cookiecutter==2.6.0
-
-      - name: Generate test GitOps repo
-        run: |
-          rm -rf /tmp/cookiecutter-out
-          cookiecutter ./gitops-repo --no-input \
-            app_name=test-app \
-            licence_plate=abc123 \
-            github_org=bcgov-c \
-            --output-dir /tmp/cookiecutter-out
-
-      - name: Upload generated repo
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-gitops-repo
-          path: /tmp/cookiecutter-out/test-app-gitops
-          retention-days: 1
-
   render:
     name: Render (${{ matrix.env }})
-    needs: generate
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -65,22 +36,22 @@ jobs:
       - name: Setup Helm
         uses: azure/setup-helm@v4
         with:
-          version: '3.14.0'
+          version: v3.14.4
 
-      - name: Download generated repo
-        uses: actions/download-artifact@v4
-        with:
-          name: generated-gitops-repo
-          path: generated
+      - name: Helm login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Render manifests
+        shell: bash
         run: |
-          cd generated/charts/gitops
-          helm dependency update
-          helm template test-app . \
-            --values ../../deploy/${{ matrix.env }}_values.yaml \
-            --namespace abc123-${{ matrix.env }} \
-            > /tmp/rendered-${{ matrix.env }}.yaml
+          set -euo pipefail
+          helm dependency update ./charts/gitops
+
+          helm template "gitops-app-${{ matrix.env }}" ./charts/gitops \
+            --values "./deploy/${{ matrix.env }}_values.yaml" \
+            --namespace "ci-${{ matrix.env }}" \
+            > "/tmp/rendered-${{ matrix.env }}.yaml"
+
           echo "✓ Rendered $(wc -l < /tmp/rendered-${{ matrix.env }}.yaml) lines"
 
       - name: Upload manifests
@@ -102,6 +73,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download policies (curl)
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p .policy-cache
@@ -116,14 +88,18 @@ jobs:
           name: rendered-${{ matrix.env }}
 
       - name: Install Conftest
+        shell: bash
         run: |
+          set -euo pipefail
           wget -q https://github.com/open-policy-agent/conftest/releases/download/v0.49.1/conftest_0.49.1_Linux_x86_64.tar.gz
           tar xzf conftest_0.49.1_Linux_x86_64.tar.gz
           sudo mv conftest /usr/local/bin/
           conftest --version
 
       - name: Run Conftest
+        shell: bash
         run: |
+          set -euo pipefail
           conftest test rendered-${{ matrix.env }}.yaml \
             --policy .policy-cache/ \
             --all-namespaces \
@@ -142,6 +118,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download policies (curl)
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p .policy-cache
@@ -154,14 +131,18 @@ jobs:
           name: rendered-${{ matrix.env }}
 
       - name: Install kube-linter
+        shell: bash
         run: |
+          set -euo pipefail
           wget -q https://github.com/stackrox/kube-linter/releases/download/v0.6.8/kube-linter-linux.tar.gz
           tar -xzf kube-linter-linux.tar.gz
           sudo mv kube-linter /usr/local/bin/
           kube-linter version
 
       - name: Run kube-linter
+        shell: bash
         run: |
+          set -euo pipefail
           kube-linter lint rendered-${{ matrix.env }}.yaml --config .policy-cache/kube-linter.yaml
 
   polaris:
@@ -176,6 +157,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download policies (curl)
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p .policy-cache
@@ -188,7 +170,9 @@ jobs:
           name: rendered-${{ matrix.env }}
 
       - name: Run Polaris
+        shell: bash
         run: |
+          set -euo pipefail
           docker run --rm \
             -v ${{ github.workspace }}:/app \
             quay.io/fairwinds/polaris:10.1.4 \
@@ -198,73 +182,26 @@ jobs:
             --format pretty \
             --set-exit-code-below-score 100
 
-  datree:
-    name: Datree (helm) (${{ matrix.env }})
-    needs: generate
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        env: [dev, test, prod]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download policies (curl)
-        run: |
-          set -euo pipefail
-          mkdir -p .policy-cache
-          base="https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/${POLICY_SOURCE_REF}/cd/policies"
-          curl -fsSL "$base/datree-policies.yaml" -o .policy-cache/datree-policies.yaml
-
-      - name: Setup Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: '3.14.0'
-
-      - name: Install Datree Helm plugin
-        run: |
-          helm plugin install https://github.com/datreeio/helm-datree
-          helm plugin update datree
-          helm datree config set offline local
-
-      - name: Download generated repo
-        uses: actions/download-artifact@v4
-        with:
-          name: generated-gitops-repo
-          path: generated
-
-      - name: Run Helm Datree policy enforcement
-        run: |
-          set -euo pipefail
-          cd generated
-          helm dependency update ./charts/gitops
-
-          helm datree test --ignore-missing-schemas \
-            --policy-config "${GITHUB_WORKSPACE}/.policy-cache/datree-policies.yaml" \
-            --include-tests ./charts/gitops \
-            -- --namespace "abc123-${{ matrix.env }}" --values "./deploy/${{ matrix.env }}_values.yaml" "gitops-app-${{ matrix.env }}"
-
   summary:
-    name: Validation summary
+    name: Summary
     if: always()
     needs:
       - render
       - conftest
       - kube-linter
       - polaris
-      - datree
     runs-on: ubuntu-latest
     steps:
       - name: Write summary
+        shell: bash
         run: |
-          echo "# Template validation (network policies)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Cookiecutter -> Helm render (dev/test/prod) -> validators (Conftest, kube-linter, Polaris, Datree)." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Job results" >> $GITHUB_STEP_SUMMARY
-          echo "- Render: ${{ needs.render.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Conftest: ${{ needs.conftest.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- kube-linter: ${{ needs.kube-linter.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Polaris: ${{ needs.polaris.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Datree (helm): ${{ needs.datree.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "# Generated repo CI" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Helm render (dev/test/prod) -> validators (Conftest, kube-linter, Polaris)." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Job results" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Render: ${{ needs.render.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Conftest: ${{ needs.conftest.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- kube-linter: ${{ needs.kube-linter.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Polaris: ${{ needs.polaris.result }}" >> "$GITHUB_STEP_SUMMARY"
+{% endraw %}

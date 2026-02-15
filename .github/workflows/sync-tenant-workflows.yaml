@@ -1,0 +1,235 @@
+name: Sync tenant workflows
+
+on:
+  workflow_call:
+    inputs:
+      repos_b64:
+        description: Base64-encoded JSON array of full repo names (e.g. ["org/tenant-abc"]).
+        required: true
+        type: string
+      branches:
+        description: Comma-separated list of branches to update.
+        required: false
+        default: main,develop,test
+        type: string
+      allow_orgs:
+        description: Space-separated allowlist of org owners to operate on. Empty means allow all.
+        required: false
+        default: ''
+        type: string
+      copy_ci:
+        description: Also sync .github/workflows/ci.yml from template workflow-templates.
+        required: false
+        default: false
+        type: boolean
+      enforce_only:
+        description: If true, delete all other workflow YAMLs in the tenant repo and keep only the synced ones.
+        required: false
+        default: false
+        type: boolean
+
+  workflow_dispatch:
+    inputs:
+      repos:
+        description: JSON array of full repo names (e.g. ["org/tenant-abc"]).
+        required: true
+        type: string
+      branches:
+        description: Comma-separated list of branches to update.
+        required: false
+        default: main,develop,test
+        type: string
+      allow_orgs:
+        description: Space-separated allowlist of org owners to operate on. Empty means allow all.
+        required: false
+        default: ''
+        type: string
+      copy_ci:
+        description: Also sync .github/workflows/ci.yml from template workflow-templates.
+        required: false
+        default: false
+        type: boolean
+      enforce_only:
+        description: If true, delete all other workflow YAMLs in the tenant repo and keep only the synced ones.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Sync workflows
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.CI || secrets.GHCR_PAT }}
+      BRANCHES: ${{ inputs.branches || github.event.inputs.branches || 'main,develop,test' }}
+      ALLOW_ORGS: ${{ inputs.allow_orgs || github.event.inputs.allow_orgs || '' }}
+      COPY_CI: ${{ inputs.copy_ci || github.event.inputs.copy_ci || false }}
+      ENFORCE_ONLY: ${{ inputs.enforce_only || github.event.inputs.enforce_only || false }}
+      REPOS_B64: ${{ inputs.repos_b64 || '' }}
+      REPOS_RAW: ${{ github.event.inputs.repos || '' }}
+    steps:
+      - name: Checkout template repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Decode repo list
+        id: decode
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -n "${REPOS_RAW}" ]; then
+            repos_json="${REPOS_RAW}"
+          else
+            if [ -z "${REPOS_B64}" ]; then
+              echo "No repos_b64 provided; nothing to do." >&2
+              echo "count=0" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            repos_json="$(echo "${REPOS_B64}" | base64 -d)"
+          fi
+
+          REPOS_JSON="${repos_json}" node -e "const j=JSON.parse(process.env.REPOS_JSON); if(!Array.isArray(j)) throw new Error('repos must be JSON array'); process.stdout.write(String(j.length));" \
+            > repos.count
+
+          printf '%s' "${repos_json}" > repos.json
+          echo "count=$(cat repos.count)" >> "$GITHUB_OUTPUT"
+
+      - name: Sync workflows to tenant repos
+        if: ${{ steps.decode.outputs.count != '0' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "Missing GH_TOKEN (secrets.CI or secrets.GHCR_PAT)" >&2
+            exit 1
+          fi
+
+          template_validate_np="${GITHUB_WORKSPACE}/.github/workflow-templates/validate-network-policies.yaml"
+          template_validate_np_comp="${GITHUB_WORKSPACE}/.github/workflow-templates/validate-network-policies-comprehensive.yaml"
+          template_ci="${GITHUB_WORKSPACE}/.github/workflow-templates/ci.yml"
+
+          test -f "${template_validate_np}" || { echo "Missing ${template_validate_np}" >&2; exit 1; }
+          test -f "${template_validate_np_comp}" || { echo "Missing ${template_validate_np_comp}" >&2; exit 1; }
+          if [ "${COPY_CI}" = "true" ]; then
+            test -f "${template_ci}" || { echo "Missing ${template_ci}" >&2; exit 1; }
+          fi
+
+          IFS=',' read -r -a branches <<< "${BRANCHES}"
+          allow_orgs="${ALLOW_ORGS}" # space-separated
+
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@users.noreply.github.com"
+
+          node -e "const repos=JSON.parse(require('fs').readFileSync('repos.json','utf8')); for(const r of repos){ console.log(r); }" > repos.txt
+
+          while IFS= read -r full; do
+            [ -z "${full}" ] && continue
+
+            if [[ "${full}" != */* ]]; then
+              echo "Skipping invalid repo: ${full}" >&2
+              continue
+            fi
+
+            owner="${full%%/*}"
+            repo="${full#*/}"
+
+            if [ -n "${allow_orgs}" ]; then
+              ok=false
+              for o in ${allow_orgs}; do
+                if [ "${o}" = "${owner}" ]; then ok=true; fi
+              done
+              if [ "${ok}" != "true" ]; then
+                echo "Skipping ${full} (owner not in allowlist)"
+                continue
+              fi
+            fi
+
+            echo "Syncing workflows -> ${full}"
+
+            workdir="$(mktemp -d)"
+            (
+              set -euo pipefail
+              cd "${workdir}"
+              GIT_TERMINAL_PROMPT=0 git clone "https://x-access-token:${GH_TOKEN}@github.com/${full}.git" repo
+              cd repo
+
+              # Ensure we can base other branches off main.
+              if ! git ls-remote --exit-code --heads origin main >/dev/null 2>&1; then
+                echo "Skipping ${full}: main branch not found" >&2
+                exit 0
+              fi
+              git fetch --no-tags origin
+
+              for branch in "${branches[@]}"; do
+                branch="$(echo "${branch}" | xargs)"
+                [ -z "${branch}" ] && continue
+
+                if git ls-remote --exit-code --heads origin "${branch}" >/dev/null 2>&1; then
+                  git checkout -B "${branch}" "origin/${branch}"
+                else
+                  echo "Creating missing branch ${full}:${branch} from main"
+                  git checkout -B "${branch}" "origin/main"
+                  git push origin "${branch}"
+                fi
+
+                # Overwrite mode: delete every other workflow YAML and keep only the approved ones.
+                if [ "${ENFORCE_ONLY}" = "true" ]; then
+                  mkdir -p .github/workflows
+
+                  keep=("validate-network-policies.yaml" "validate-network-policies-comprehensive.yaml")
+                  if [ "${COPY_CI}" = "true" ]; then
+                    keep+=("ci.yml")
+                  fi
+
+                  shopt -s nullglob
+                  for f in .github/workflows/*.yml .github/workflows/*.yaml; do
+                    bn="$(basename "${f}")"
+                    keep_it=false
+                    for k in "${keep[@]}"; do
+                      if [ "${bn}" = "${k}" ]; then keep_it=true; fi
+                    done
+                    if [ "${keep_it}" != "true" ]; then
+                      rm -f "${f}"
+                    fi
+                  done
+                fi
+
+                mkdir -p .github/workflows
+                cp "${template_validate_np}" .github/workflows/validate-network-policies.yaml
+                cp "${template_validate_np_comp}" .github/workflows/validate-network-policies-comprehensive.yaml
+                if [ "${COPY_CI}" = "true" ]; then
+                  cp "${template_ci}" .github/workflows/ci.yml
+                fi
+
+                # Stage the whole workflows directory so deleted workflows are included.
+                git add -A .github/workflows
+
+                if git diff --cached --quiet; then
+                  echo "No workflow changes for ${full}:${branch}"
+                  continue
+                fi
+
+                git commit -m "[skip ci] chore(ci): sync validation workflows"
+                git push origin "${branch}"
+                echo "✓ Updated ${full}:${branch}"
+              done
+            )
+
+            rm -rf "${workdir}"
+          done < repos.txt
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## Tenant workflow sync" >> "$GITHUB_STEP_SUMMARY"
+          echo "Branches: ${BRANCHES}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Copy CI: ${COPY_CI}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Enforce only: ${ENFORCE_ONLY}" >> "$GITHUB_STEP_SUMMARY"

@@ -1,18 +1,12 @@
-name: Validate Template Output (Network Policies)
+{% raw %}name: Network Policy Validation
 
 on:
   push:
     branches: [main, develop]
-    paths:
-      - 'gitops-repo/**'
-      - 'policies/**'
-      - '.github/workflows/validate-network-policies.yaml'
+    paths: ['charts/**', 'deploy/**', '.github/workflows/**']
   pull_request:
     branches: [main, develop]
-    paths:
-      - 'gitops-repo/**'
-      - 'policies/**'
-      - '.github/workflows/validate-network-policies.yaml'
+    paths: ['charts/**', 'deploy/**', '.github/workflows/**']
 
 env:
   POLICY_SOURCE_ORG: olissao1616
@@ -20,42 +14,11 @@ env:
   POLICY_SOURCE_REF: main
 
 jobs:
-  generate:
-    name: Generate test GitOps repo
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Cookiecutter
-        run: pip install cookiecutter==2.6.0
-
-      - name: Generate test GitOps repo
-        run: |
-          rm -rf /tmp/cookiecutter-out
-          cookiecutter ./gitops-repo --no-input \
-            app_name=test-app \
-            licence_plate=abc123 \
-            github_org=bcgov-c \
-            --output-dir /tmp/cookiecutter-out
-
-      - name: Upload generated repo
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-gitops-repo
-          path: /tmp/cookiecutter-out/test-app-gitops
-          retention-days: 1
-
   render:
     name: Render (${{ matrix.env }})
-    needs: generate
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         env: [dev, test, prod]
     steps:
@@ -67,23 +30,21 @@ jobs:
         with:
           version: '3.14.0'
 
-      - name: Download generated repo
-        uses: actions/download-artifact@v4
-        with:
-          name: generated-gitops-repo
-          path: generated
+      - name: Update Helm dependencies
+        run: |
+          cd charts/gitops
+          helm dependency update
 
       - name: Render manifests
         run: |
-          cd generated/charts/gitops
-          helm dependency update
-          helm template test-app . \
-            --values ../../deploy/${{ matrix.env }}_values.yaml \
-            --namespace abc123-${{ matrix.env }} \
+          set -euo pipefail
+          helm template gitops-app-${{ matrix.env }} ./charts/gitops \
+            --values ./deploy/${{ matrix.env }}_values.yaml \
+            --namespace ${{ matrix.env }} \
             > /tmp/rendered-${{ matrix.env }}.yaml
           echo "✓ Rendered $(wc -l < /tmp/rendered-${{ matrix.env }}.yaml) lines"
 
-      - name: Upload manifests
+      - name: Upload rendered manifests
         uses: actions/upload-artifact@v4
         with:
           name: rendered-${{ matrix.env }}
@@ -95,6 +56,7 @@ jobs:
     needs: render
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         env: [dev, test, prod]
     steps:
@@ -135,6 +97,7 @@ jobs:
     needs: render
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         env: [dev, test, prod]
     steps:
@@ -169,6 +132,7 @@ jobs:
     needs: render
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         env: [dev, test, prod]
     steps:
@@ -200,7 +164,6 @@ jobs:
 
   datree:
     name: Datree (helm) (${{ matrix.env }})
-    needs: generate
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -228,22 +191,15 @@ jobs:
           helm plugin update datree
           helm datree config set offline local
 
-      - name: Download generated repo
-        uses: actions/download-artifact@v4
-        with:
-          name: generated-gitops-repo
-          path: generated
-
       - name: Run Helm Datree policy enforcement
         run: |
           set -euo pipefail
-          cd generated
           helm dependency update ./charts/gitops
 
           helm datree test --ignore-missing-schemas \
             --policy-config "${GITHUB_WORKSPACE}/.policy-cache/datree-policies.yaml" \
             --include-tests ./charts/gitops \
-            -- --namespace "abc123-${{ matrix.env }}" --values "./deploy/${{ matrix.env }}_values.yaml" "gitops-app-${{ matrix.env }}"
+            -- --namespace "${{ matrix.env }}" --values "./deploy/${{ matrix.env }}_values.yaml" "gitops-app-${{ matrix.env }}"
 
   summary:
     name: Validation summary
@@ -258,9 +214,9 @@ jobs:
     steps:
       - name: Write summary
         run: |
-          echo "# Template validation (network policies)" >> $GITHUB_STEP_SUMMARY
+          echo "# Network policy validation" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Cookiecutter -> Helm render (dev/test/prod) -> validators (Conftest, kube-linter, Polaris, Datree)." >> $GITHUB_STEP_SUMMARY
+          echo "Helm render (dev/test/prod) -> validators (Conftest, kube-linter, Polaris, Datree)." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Job results" >> $GITHUB_STEP_SUMMARY
           echo "- Render: ${{ needs.render.result }}" >> $GITHUB_STEP_SUMMARY
@@ -268,3 +224,5 @@ jobs:
           echo "- kube-linter: ${{ needs.kube-linter.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Polaris: ${{ needs.polaris.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Datree (helm): ${{ needs.datree.result }}" >> $GITHUB_STEP_SUMMARY
+{% endraw %}
+

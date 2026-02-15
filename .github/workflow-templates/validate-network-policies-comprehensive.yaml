@@ -1,4 +1,4 @@
-{% raw %}name: Complete Network Policy Validation
+name: Validate Policies (Comprehensive)
 
 on:
   push:
@@ -7,6 +7,15 @@ on:
   pull_request:
     branches: [main, develop]
     paths: ['charts/**', 'deploy/**', '.github/workflows/**']
+
+permissions:
+  contents: read
+
+env:
+  POLICY_SOURCE_ORG: olissao1616
+  POLICY_SOURCE_REPO: ag-devops
+  POLICY_SOURCE_REF: main
+  POLICY_DIR: .policy-cache
 
 jobs:
   render:
@@ -70,23 +79,20 @@ jobs:
           sudo mv conftest /usr/local/bin/
           conftest --version
 
-      - name: Download centralized policies
+      - name: Download policies (curl)
+        shell: bash
         run: |
-          mkdir -p /tmp/policies
-          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -L https://raw.githubusercontent.com/olissao1616/ag-devops/main/cd/policies/network-policies.rego \
-            -o /tmp/policies/network-policies.rego
-          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -L https://raw.githubusercontent.com/olissao1616/ag-devops/main/cd/policies/avi-infrasetting-annotation.rego \
-            -o /tmp/policies/avi-infrasetting-annotation.rego
-          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -L https://raw.githubusercontent.com/olissao1616/ag-devops/main/cd/policies/routes-edge-termination.rego \
-            -o /tmp/policies/routes-edge-termination.rego
+          set -euo pipefail
+          mkdir -p "${POLICY_DIR}"
+          base="https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/${POLICY_SOURCE_REF}/cd/policies"
+          curl -fsSL "$base/network-policies.rego" -o "${POLICY_DIR}/network-policies.rego"
+          curl -fsSL "$base/avi-infrasetting-annotation.rego" -o "${POLICY_DIR}/avi-infrasetting-annotation.rego"
+          curl -fsSL "$base/routes-edge-termination.rego" -o "${POLICY_DIR}/routes-edge-termination.rego"
 
       - name: Run Conftest
         run: |
           conftest test rendered-${{ matrix.env }}.yaml \
-            --policy /tmp/policies/ \
+            --policy "${POLICY_DIR}/" \
             --all-namespaces \
             --output table \
             --fail-on-warn
@@ -120,12 +126,13 @@ jobs:
           helm plugin list
           helm datree --help
 
-      - name: Download centralized Datree policies
+      - name: Download policies (curl)
+        shell: bash
         run: |
-          mkdir -p /tmp/policies
-          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -L https://raw.githubusercontent.com/olissao1616/ag-devops/main/cd/policies/datree-policies.yaml \
-            -o /tmp/policies/datree-policies.yaml
+          set -euo pipefail
+          mkdir -p "${POLICY_DIR}"
+          base="https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/${POLICY_SOURCE_REF}/cd/policies"
+          curl -fsSL "$base/datree-policies.yaml" -o "${POLICY_DIR}/datree-policies.yaml"
 
       - name: Run Helm Datree policy enforcement
         run: |
@@ -133,7 +140,7 @@ jobs:
           helm dependency update ./charts/gitops
 
           helm datree test --ignore-missing-schemas \
-            --policy-config /tmp/policies/datree-policies.yaml \
+            --policy-config "${GITHUB_WORKSPACE}/${POLICY_DIR}/datree-policies.yaml" \
             --include-tests ./charts/gitops \
             -- --namespace "${{ matrix.env }}" --values "./deploy/${{ matrix.env }}_values.yaml" "gitops-app-${{ matrix.env }}"
 
@@ -186,24 +193,44 @@ jobs:
         with:
           name: rendered-${{ matrix.env }}
 
-      - name: Download Polaris config
+      - name: Download policies (curl)
+        shell: bash
         run: |
-          mkdir -p /tmp/policies
-          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -L https://raw.githubusercontent.com/olissao1616/ag-devops/main/cd/policies/polaris.yaml \
-            -o /tmp/policies/polaris.yaml
+          set -euo pipefail
+          mkdir -p "${POLICY_DIR}"
+          base="https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/${POLICY_SOURCE_REF}/cd/policies"
+          curl -fsSL "$base/polaris.yaml" -o "${POLICY_DIR}/polaris.yaml"
 
       - name: Run Polaris audit
         run: |
           docker run --rm \
             -v ${{ github.workspace }}:/app \
-            -v /tmp/policies/polaris.yaml:/tmp/polaris.yaml \
             quay.io/fairwinds/polaris:10.1.4 \
             polaris audit \
             --audit-path /app/rendered-${{ matrix.env }}.yaml \
-            --config /tmp/polaris.yaml \
+            --config /app/.policy-cache/polaris.yaml \
             --format pretty \
-            --set-exit-code-below-score 75
+            --set-exit-code-below-score 100
+
+      - name: Upload Polaris report
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v ${{ github.workspace }}:/app \
+            quay.io/fairwinds/polaris:10.1.4 \
+            polaris audit \
+            --audit-path /app/rendered-${{ matrix.env }}.yaml \
+            --config /app/.policy-cache/polaris.yaml \
+            --format json > polaris-report-${{ matrix.env }}.json
+
+      - name: Upload Polaris report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: polaris-report-${{ matrix.env }}
+          path: polaris-report-${{ matrix.env }}.json
 
   kube-score:
     name: kube-score (${{ matrix.env }})
@@ -254,16 +281,17 @@ jobs:
           sudo mv kube-linter /usr/local/bin/
           kube-linter version
 
-      - name: Download kube-linter config
+      - name: Download policies (curl)
+        shell: bash
         run: |
-          mkdir -p /tmp/policies
-          curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -L https://raw.githubusercontent.com/olissao1616/ag-devops/main/cd/policies/kube-linter.yaml \
-            -o /tmp/policies/kube-linter.yaml
+          set -euo pipefail
+          mkdir -p "${POLICY_DIR}"
+          base="https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/${POLICY_SOURCE_REF}/cd/policies"
+          curl -fsSL "$base/kube-linter.yaml" -o "${POLICY_DIR}/kube-linter.yaml"
 
       - name: Run kube-linter
         run: |
-          kube-linter lint rendered-${{ matrix.env }}.yaml --config /tmp/policies/kube-linter.yaml
+          kube-linter lint rendered-${{ matrix.env }}.yaml --config "${POLICY_DIR}/kube-linter.yaml"
 
   pluto:
     name: Pluto (${{ matrix.env }})
@@ -390,5 +418,3 @@ jobs:
           echo "- Pluto: ${{ needs.pluto.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Trivy: ${{ needs.trivy.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Checkov: ${{ needs.checkov.result }}" >> $GITHUB_STEP_SUMMARY
-{% endraw %}
-
