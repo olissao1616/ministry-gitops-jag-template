@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-15T07:50:28.427Z",
+  "generatedAt": "2026-02-15T08:50:43.059Z",
   "template": "olissao1616/ministry-gitops-jag-template",
   "owners": [
     "olissao1616"
@@ -141,7 +141,7 @@
           "CODEOWNERS",
           "dependabot.yml"
         ],
-        "reused": false
+        "reused": true
       }
     }
   ]
