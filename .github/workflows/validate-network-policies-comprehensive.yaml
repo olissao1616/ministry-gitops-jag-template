@@ -1,10 +1,10 @@
 name: Validate Template Output (Comprehensive)
 
-# Policy sources (single source of truth): this workflow downloads policy files from a central repo.
-# - Conftest (OPA/Rego): *.rego (e.g., network-policies.rego, avi-infrasetting-annotation.rego, routes-edge-termination.rego)
-# - Polaris: polaris.yaml
-# - kube-linter: kube-linter.yaml
-# - Datree (helm plugin): datree-policies.yaml
+# Policy sources (single source of truth): this workflow uses the policy files committed under /policies.
+# - Conftest (OPA/Rego): policies/*.rego (e.g., network-policies.rego, avi-infrasetting-annotation.rego, routes-edge-termination.rego)
+# - Polaris: policies/polaris.yaml
+# - kube-linter: policies/kube-linter.yaml
+# - Datree (helm plugin): policies/datree-policies.yaml
 
 on:
   push:
@@ -22,11 +22,6 @@ on:
 
 permissions:
   contents: read
-
-env:
-  POLICY_SOURCE_ORG: olissao1616
-  POLICY_SOURCE_REPO: ag-devops
-  POLICY_SOURCE_REF: main
 
 jobs:
   generate:
@@ -118,15 +113,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download policies (curl)
-        run: |
-          set -euo pipefail
-          mkdir -p .policy-cache
-          base="https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/${POLICY_SOURCE_REF}/cd/policies"
-          curl -fsSL "$base/network-policies.rego" -o .policy-cache/network-policies.rego
-          curl -fsSL "$base/avi-infrasetting-annotation.rego" -o .policy-cache/avi-infrasetting-annotation.rego
-          curl -fsSL "$base/routes-edge-termination.rego" -o .policy-cache/routes-edge-termination.rego
-
       - name: Download manifests
         uses: actions/download-artifact@v4
         with:
@@ -142,7 +128,7 @@ jobs:
       - name: Run Conftest
         run: |
           conftest test rendered-${{ matrix.env }}.yaml \
-            --policy .policy-cache/ \
+            --policy policies/ \
             --all-namespaces \
             --output table \
             --fail-on-warn
@@ -191,13 +177,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download policies (curl)
-        run: |
-          set -euo pipefail
-          mkdir -p .policy-cache
-          base="https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/${POLICY_SOURCE_REF}/cd/policies"
-          curl -fsSL "$base/polaris.yaml" -o .policy-cache/polaris.yaml
-
       - name: Download manifests
         uses: actions/download-artifact@v4
         with:
@@ -210,7 +189,7 @@ jobs:
             quay.io/fairwinds/polaris:10.1.4 \
             polaris audit \
             --audit-path /app/rendered-${{ matrix.env }}.yaml \
-            --config /app/.policy-cache/polaris.yaml \
+            --config /app/policies/polaris.yaml \
             --format pretty \
             --set-exit-code-below-score 100
 
@@ -222,7 +201,7 @@ jobs:
             quay.io/fairwinds/polaris:10.1.4 \
             polaris audit \
             --audit-path /app/rendered-${{ matrix.env }}.yaml \
-            --config /app/.policy-cache/polaris.yaml \
+            --config /app/policies/polaris.yaml \
             --format json > polaris-report-${{ matrix.env }}.json
 
       - name: Upload Polaris report artifact
@@ -270,13 +249,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download policies (curl)
-        run: |
-          set -euo pipefail
-          mkdir -p .policy-cache
-          base="https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/${POLICY_SOURCE_REF}/cd/policies"
-          curl -fsSL "$base/kube-linter.yaml" -o .policy-cache/kube-linter.yaml
-
       - name: Download manifests
         uses: actions/download-artifact@v4
         with:
@@ -291,7 +263,7 @@ jobs:
 
       - name: Run kube-linter
         run: |
-          kube-linter lint rendered-${{ matrix.env }}.yaml --config .policy-cache/kube-linter.yaml
+          kube-linter lint rendered-${{ matrix.env }}.yaml --config policies/kube-linter.yaml
 
   pluto:
     name: Pluto (${{ matrix.env }})
@@ -398,13 +370,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download policies (curl)
-        run: |
-          set -euo pipefail
-          mkdir -p .policy-cache
-          base="https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/${POLICY_SOURCE_REF}/cd/policies"
-          curl -fsSL "$base/datree-policies.yaml" -o .policy-cache/datree-policies.yaml
-
       - name: Setup Helm
         uses: azure/setup-helm@v4
         with:
@@ -435,7 +400,7 @@ jobs:
           helm dependency update ./charts/gitops
 
           helm datree test --ignore-missing-schemas \
-            --policy-config "${GITHUB_WORKSPACE}/.policy-cache/datree-policies.yaml" \
+            --policy-config "${GITHUB_WORKSPACE}/policies/datree-policies.yaml" \
             --include-tests ./charts/gitops \
             -- --namespace "abc123-${{ matrix.env }}" --values "./deploy/${{ matrix.env }}_values.yaml" "gitops-app-${{ matrix.env }}"
 
