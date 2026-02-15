@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-15T07:07:59.947Z",
+  "generatedAt": "2026-02-15T07:50:28.427Z",
   "template": "olissao1616/ministry-gitops-jag-template",
   "owners": [
     "olissao1616"
@@ -14,14 +14,14 @@
     "develop"
   ],
   "newWithinHours": 2,
-  "reposScanned": 6,
-  "templateRepos": 2,
+  "reposScanned": 5,
+  "templateRepos": 1,
   "templateReposNewInWindow": 1,
   "repos": [
     {
-      "full_name": "olissao1616/test2",
-      "url": "https://github.com/olissao1616/test2",
-      "created_at": "2026-02-15T06:47:33Z",
+      "full_name": "olissao1616/test",
+      "url": "https://github.com/olissao1616/test",
+      "created_at": "2026-02-15T07:26:22Z",
       "from_template": true,
       "default_branch": "main",
       "checks": {
@@ -36,7 +36,7 @@
           "workflows": [
             {
               "path": ".github/workflows/ci.yml",
-              "totalUses": 13,
+              "totalUses": 9,
               "pinned": 0,
               "pinnedPct": 0,
               "hasPullRequestTarget": false,
@@ -44,8 +44,8 @@
               "hasPermissionsBlock": false
             },
             {
-              "path": ".github/workflows/policy-enforcement.yaml",
-              "totalUses": 2,
+              "path": ".github/workflows/validate-network-policies-comprehensive.yaml",
+              "totalUses": 28,
               "pinned": 0,
               "pinnedPct": 0,
               "hasPullRequestTarget": false,
@@ -53,284 +53,20 @@
               "hasPermissionsBlock": false
             },
             {
-              "path": ".github/workflows/protect-branches-dispatch.yml",
-              "totalUses": 1,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/protect-branches.yml",
-              "totalUses": 1,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/publish-on-tag.yml",
-              "totalUses": 2,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/release.yml",
-              "totalUses": 4,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/repository-setup-staged.yml",
-              "totalUses": 12,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/repository-setup.yml",
-              "totalUses": 6,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/sync-tenant-workflows.yaml",
-              "totalUses": 1,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": true,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/template-report.yml",
+              "path": ".github/workflows/validate-network-policies.yaml",
               "totalUses": 11,
               "pinned": 0,
               "pinnedPct": 0,
               "hasPullRequestTarget": false,
-              "checkoutPersistFalse": true,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/template-security-report.yml",
-              "totalUses": 3,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": true,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/validate-network-policies-comprehensive.yaml",
-              "totalUses": 33,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/validate-network-policies.yaml",
-              "totalUses": 16,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
               "checkoutPersistFalse": false,
               "hasPermissionsBlock": false
             }
           ],
-          "totalUses": 105,
+          "totalUses": 48,
           "pinned": 0,
           "pinnedPct": 0,
           "hasPullRequestTarget": false,
-          "checkoutPersistFalse": true,
-          "hasPermissionsBlock": false
-        },
-        "security": {
-          "status": "reported",
-          "securityPolicy": "missing",
-          "vulnerabilityAlerts": false,
-          "automatedSecurityFixes": true,
-          "securityAndAnalysis": {
-            "status": "reported",
-            "advancedSecurity": null,
-            "secretScanning": true,
-            "secretScanningPushProtection": true,
-            "dependabotSecurityUpdates": false
-          }
-        },
-        "branchProtection": {
-          "status": "unknown",
-          "branches": {
-            "main": {
-              "exists": true,
-              "status": "unprotected"
-            },
-            "test": {
-              "exists": true,
-              "status": "unprotected"
-            },
-            "develop": {
-              "exists": true,
-              "status": "unprotected"
-            }
-          }
-        }
-      },
-      "autofix": {
-        "attempted": true,
-        "prUrl": "https://github.com/olissao1616/test2/pull/1",
-        "reason": null,
-        "fixes": [
-          "CODEOWNERS",
-          "dependabot.yml"
-        ],
-        "reused": false
-      }
-    },
-    {
-      "full_name": "olissao1616/test",
-      "url": "https://github.com/olissao1616/test",
-      "created_at": "2026-02-15T01:52:03Z",
-      "from_template": true,
-      "default_branch": "main",
-      "checks": {
-        "codeowners": {
-          "status": "missing"
-        },
-        "dependabot": {
-          "status": "missing"
-        },
-        "actions": {
-          "status": "reported",
-          "workflows": [
-            {
-              "path": ".github/workflows/ci.yml",
-              "totalUses": 13,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/policy-enforcement.yaml",
-              "totalUses": 2,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/protect-branches-dispatch.yml",
-              "totalUses": 1,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/protect-branches.yml",
-              "totalUses": 1,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/publish-on-tag.yml",
-              "totalUses": 2,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/release.yml",
-              "totalUses": 4,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/repository-setup-staged.yml",
-              "totalUses": 12,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/repository-setup.yml",
-              "totalUses": 6,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/template-report.yml",
-              "totalUses": 4,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": true,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/template-security-report.yml",
-              "totalUses": 3,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": true,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/validate-network-policies-comprehensive.yaml",
-              "totalUses": 33,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            },
-            {
-              "path": ".github/workflows/validate-network-policies.yaml",
-              "totalUses": 16,
-              "pinned": 0,
-              "pinnedPct": 0,
-              "hasPullRequestTarget": false,
-              "checkoutPersistFalse": false,
-              "hasPermissionsBlock": false
-            }
-          ],
-          "totalUses": 97,
-          "pinned": 0,
-          "pinnedPct": 0,
-          "hasPullRequestTarget": false,
-          "checkoutPersistFalse": true,
+          "checkoutPersistFalse": false,
           "hasPermissionsBlock": false
         },
         "security": {
@@ -405,7 +141,7 @@
           "CODEOWNERS",
           "dependabot.yml"
         ],
-        "reused": true
+        "reused": false
       }
     }
   ]
