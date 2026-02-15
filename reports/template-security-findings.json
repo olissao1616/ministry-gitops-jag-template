@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-02-15T08:50:43.059Z",
+  "generatedAt": "2026-02-15T09:47:47.883Z",
   "template": "olissao1616/ministry-gitops-jag-template",
   "owners": [
     "olissao1616"
@@ -16,7 +16,7 @@
   "newWithinHours": 2,
   "reposScanned": 5,
   "templateRepos": 1,
-  "templateReposNewInWindow": 1,
+  "templateReposNewInWindow": 0,
   "repos": [
     {
       "full_name": "olissao1616/test",

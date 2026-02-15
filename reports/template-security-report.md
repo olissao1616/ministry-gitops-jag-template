@@ -12,14 +12,12 @@ Max auto-fix PRs per run: 5
 - Total repos scanned: 5
 - Template-derived repos: 1
 - New window: last 2 hour(s)
-- Template-derived repos created in window: 1
+- Template-derived repos created in window: 0
 - Note: Detailed checks are only performed for template-derived repos (REPORT_MODE=template-only)
 
 ## New template-derived repositories (window)
 
-| Repo | Created | Default branch |
-| --- | --- | --- |
-| [olissao1616/test](https://github.com/olissao1616/test) | 2026-02-15T07:26:22Z | main |
+- None
 
 ## Repositories (template-derived)
 
