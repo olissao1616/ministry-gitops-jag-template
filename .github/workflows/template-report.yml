@@ -223,14 +223,14 @@ jobs:
       - name: Persist report (overwrite)
         shell: bash
         env:
-          PUSH_TOKEN: ${{ github.token }}
+          PUSH_TOKEN: ${{ secrets.CI || secrets.GHCR_PAT }}
         run: |
           set -euo pipefail
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
 
           if [ -z "${PUSH_TOKEN:-}" ]; then
-            echo "Missing PUSH_TOKEN (github.token)" >&2
+            echo "Missing PUSH_TOKEN (secrets.CI or secrets.GHCR_PAT)" >&2
             exit 1
           fi
           git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
@@ -240,7 +240,15 @@ jobs:
           git checkout -B "${BRANCH}" "origin/${BRANCH}"
 
           mkdir -p reports
-          # Artifact download preserves paths; these should now exist in the workspace.
+          # Artifact download usually preserves paths, but some setups flatten; handle both.
+          if [ ! -f reports/template-usage-report.md ] && [ -f template-usage-report.md ]; then
+            mv template-usage-report.md reports/template-usage-report.md
+          fi
+          if [ ! -f "${NEW_JSON_FILE}" ] && [ -f "$(basename "${NEW_JSON_FILE}")" ]; then
+            mkdir -p "$(dirname "${NEW_JSON_FILE}")"
+            mv "$(basename "${NEW_JSON_FILE}")" "${NEW_JSON_FILE}"
+          fi
+
           test -f reports/template-usage-report.md || true
           test -f "${NEW_JSON_FILE}" || true
 
