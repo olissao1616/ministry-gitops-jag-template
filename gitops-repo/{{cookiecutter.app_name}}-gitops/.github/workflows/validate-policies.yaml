@@ -74,13 +74,13 @@ jobs:
         run: |
           mkdir -p /tmp/policies
           curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -L https://raw.githubusercontent.com/olissao1616/ag-devops/main/cd/policies/network-policies.rego \
+            -L https://raw.githubusercontent.com/{% endraw %}{{cookiecutter.github_org}}{% raw %}/ministry-gitops-jag-template/main/policies/network-policies.rego \
             -o /tmp/policies/network-policies.rego
           curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -L https://raw.githubusercontent.com/olissao1616/ag-devops/main/cd/policies/avi-infrasetting-annotation.rego \
+            -L https://raw.githubusercontent.com/{% endraw %}{{cookiecutter.github_org}}{% raw %}/ministry-gitops-jag-template/main/policies/avi-infrasetting-annotation.rego \
             -o /tmp/policies/avi-infrasetting-annotation.rego
           curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -L https://raw.githubusercontent.com/olissao1616/ag-devops/main/cd/policies/routes-edge-termination.rego \
+            -L https://raw.githubusercontent.com/{% endraw %}{{cookiecutter.github_org}}{% raw %}/ministry-gitops-jag-template/main/policies/routes-edge-termination.rego \
             -o /tmp/policies/routes-edge-termination.rego
 
       - name: Run Conftest
@@ -119,7 +119,7 @@ jobs:
         run: |
           mkdir -p /tmp/policies
           curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -L https://raw.githubusercontent.com/olissao1616/ag-devops/main/cd/policies/kube-linter.yaml \
+            -L https://raw.githubusercontent.com/{% endraw %}{{cookiecutter.github_org}}{% raw %}/ministry-gitops-jag-template/main/policies/kube-linter.yaml \
             -o /tmp/policies/kube-linter.yaml
 
       - name: Run kube-linter
@@ -147,7 +147,7 @@ jobs:
         run: |
           mkdir -p /tmp/policies
           curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -L https://raw.githubusercontent.com/olissao1616/ag-devops/main/cd/policies/polaris.yaml \
+            -L https://raw.githubusercontent.com/{% endraw %}{{cookiecutter.github_org}}{% raw %}/ministry-gitops-jag-template/main/policies/polaris.yaml \
             -o /tmp/policies/polaris.yaml
 
       - name: Run Polaris
@@ -189,7 +189,7 @@ jobs:
         run: |
           mkdir -p /tmp/policies
           curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -L https://raw.githubusercontent.com/olissao1616/ag-devops/main/cd/policies/datree-policies.yaml \
+            -L https://raw.githubusercontent.com/{% endraw %}{{cookiecutter.github_org}}{% raw %}/ministry-gitops-jag-template/main/policies/datree-policies.yaml \
             -o /tmp/policies/datree-policies.yaml
 
       - name: Run Helm Datree policy enforcement

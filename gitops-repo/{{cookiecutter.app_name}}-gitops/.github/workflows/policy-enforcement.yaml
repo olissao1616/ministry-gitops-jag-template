@@ -43,7 +43,7 @@ jobs:
         run: |
           mkdir -p /tmp/policies
           curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -L https://raw.githubusercontent.com/olissao1616/ag-devops/main/cd/policies/datree-policies.yaml \
+            -L https://raw.githubusercontent.com/{% endraw %}{{cookiecutter.github_org}}{% raw %}/ministry-gitops-jag-template/main/policies/datree-policies.yaml \
             -o /tmp/datree-policies.yaml
 
       - name: Policy Enforcement
