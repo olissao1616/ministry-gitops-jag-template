@@ -177,6 +177,40 @@ jobs:
         run: |
           kube-linter lint rendered-${{ matrix.env }}.yaml --config .policy-cache/kube-linter.yaml
 
+  polaris:
+    name: Polaris (${{ matrix.env }})
+    needs: render
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [dev, test, prod]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download policies (curl)
+        run: |
+          set -euo pipefail
+          mkdir -p .policy-cache
+          base="https://raw.githubusercontent.com/${POLICY_SOURCE_ORG}/${POLICY_SOURCE_REPO}/${POLICY_SOURCE_REF}/cd/policies"
+          curl -fsSL "$base/polaris.yaml" -o .policy-cache/polaris.yaml
+
+      - name: Download manifests
+        uses: actions/download-artifact@v4
+        with:
+          name: rendered-${{ matrix.env }}
+
+      - name: Run Polaris
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/app \
+            quay.io/fairwinds/polaris:10.1.4 \
+            polaris audit \
+            --audit-path /app/rendered-${{ matrix.env }}.yaml \
+            --config /app/.policy-cache/polaris.yaml \
+            --format pretty \
+            --set-exit-code-below-score 100
+
   summary:
     name: Summary
     if: always()
@@ -184,15 +218,17 @@ jobs:
       - render
       - conftest
       - kube-linter
+      - polaris
     runs-on: ubuntu-latest
     steps:
       - name: Write summary
         run: |
           echo "# Template CI (smoke)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Cookiecutter -> Helm render (dev/test/prod) -> validators (Conftest, kube-linter)." >> $GITHUB_STEP_SUMMARY
+          echo "Cookiecutter -> Helm render (dev/test/prod) -> validators (Conftest, kube-linter, Polaris)." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Job results" >> $GITHUB_STEP_SUMMARY
           echo "- Render: ${{ needs.render.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Conftest: ${{ needs.conftest.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- kube-linter: ${{ needs.kube-linter.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Polaris: ${{ needs.polaris.result }}" >> $GITHUB_STEP_SUMMARY
