@@ -137,7 +137,7 @@ jobs:
           fi
 
           IFS=',' read -r -a branches <<< "${BRANCHES}"
-          allow_orgs="${ALLOW_ORGS}" # space-separated
+          allow_orgs="${ALLOW_ORGS//,/ }" # space- or comma-separated
 
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@users.noreply.github.com"

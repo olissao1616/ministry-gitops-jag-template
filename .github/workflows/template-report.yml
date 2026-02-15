@@ -107,7 +107,7 @@ jobs:
             const fs = require('fs');
 
             const label = process.env.BACKLOG_LABEL;
-            const allowOrgs = String(process.env.ALLOW_ORGS || '').split(/\s+/).filter(Boolean);
+            const allowOrgs = String(process.env.ALLOW_ORGS || '').split(/[\s,]+/).filter(Boolean);
             const filePath = process.env.NEW_JSON_FILE;
 
             if (!filePath || !fs.existsSync(filePath)) {
@@ -238,7 +238,7 @@ jobs:
           github-token: ${{ env.GH_TOKEN }}
           script: |
             const label = process.env.BACKLOG_LABEL;
-            const allowOrgs = String(process.env.ALLOW_ORGS || '').split(/\s+/).filter(Boolean);
+            const allowOrgs = String(process.env.ALLOW_ORGS || '').split(/[\s,]+/).filter(Boolean);
 
             const issues = [];
             for await (const page of github.paginate.iterator(github.rest.issues.listForRepo, {
@@ -296,7 +296,7 @@ jobs:
         with:
           github-token: ${{ env.GH_TOKEN }}
           script: |
-            const allowOrgs = (process.env.ORGS || '').split(/\s+/).filter(Boolean);
+            const allowOrgs = (process.env.ORGS || '').split(/[\s,]+/).filter(Boolean);
             const branches = String(process.env.BRANCHES || 'main,test,develop')
               .split(',').map(s => s.trim()).filter(Boolean);
             const contexts = String(process.env.REQUIRED_CONTEXTS || 'policy-check')
