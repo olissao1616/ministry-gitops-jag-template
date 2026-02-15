@@ -12,18 +12,20 @@ Max auto-fix PRs per run: 5
 - Total repos scanned: 5
 - Template-derived repos: 1
 - New window: last 2 hour(s)
-- Template-derived repos created in window: 0
+- Template-derived repos created in window: 1
 - Note: Detailed checks are only performed for template-derived repos (REPORT_MODE=template-only)
 
 ## New template-derived repositories (window)
 
-- None
+| Repo | Created | Default branch |
+| --- | --- | --- |
+| [olissao1616/test](https://github.com/olissao1616/test) | 2026-02-15T01:52:03Z | main |
 
 ## Repositories (template-derived)
 
 | Repo | Created | CODEOWNERS | Dependabot | SECURITY.md | Vuln alerts | Secret scan | Push protect | Actions pinned | main | test | develop | Auto-fix PR | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [olissao1616/test](https://github.com/olissao1616/test) | 2026-02-14T02:50:54Z | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | 0% | ✅ | ✅ | ✅ | [PR](https://github.com/olissao1616/test/pull/1) | Unpinned actions; Auto-fix pending merge (CODEOWNERS, dependabot.yml) |
+| [olissao1616/test](https://github.com/olissao1616/test) | 2026-02-15T01:52:03Z | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | 0% | ✅ | ✅ | ✅ | [PR](https://github.com/olissao1616/test/pull/1) | Unpinned actions; Auto-fix pending merge (CODEOWNERS, dependabot.yml) |
 
 Legend: ✅ compliant/present, ❌ missing/non-compliant, — branch missing, ⚠ unknown (permissions/API)
 
