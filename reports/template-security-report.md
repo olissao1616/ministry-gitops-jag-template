@@ -19,24 +19,24 @@ Max auto-fix PRs per run: 5
 
 | Repo | Created | Default branch |
 | --- | --- | --- |
-| [olissao1616/test222](https://github.com/olissao1616/test222) | 2026-02-15T05:16:45Z | main |
+| [olissao1616/test2](https://github.com/olissao1616/test2) | 2026-02-15T06:47:33Z | main |
 
 ## Repositories (template-derived)
 
 | Repo | Created | CODEOWNERS | Dependabot | SECURITY.md | Vuln alerts | Secret scan | Push protect | Actions pinned | main | test | develop | Auto-fix PR | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [olissao1616/test222](https://github.com/olissao1616/test222) | 2026-02-15T05:16:45Z | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | 0% | ❌ | ❌ | ❌ | [PR](https://github.com/olissao1616/test222/pull/1) | Unpinned actions; Auto-fix pending merge (CODEOWNERS, dependabot.yml) |
+| [olissao1616/test2](https://github.com/olissao1616/test2) | 2026-02-15T06:47:33Z | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | 0% | ❌ | ❌ | ❌ | [PR](https://github.com/olissao1616/test2/pull/1) | Unpinned actions; Auto-fix pending merge (CODEOWNERS, dependabot.yml) |
 | [olissao1616/test](https://github.com/olissao1616/test) | 2026-02-15T01:52:03Z | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | 0% | ✅ | ✅ | ✅ | [PR](https://github.com/olissao1616/test/pull/1) | Unpinned actions; Auto-fix pending merge (CODEOWNERS, dependabot.yml) |
 
 Legend: ✅ compliant/present, ❌ missing/non-compliant, — branch missing, ⚠ unknown (permissions/API)
 
 ## Branch protection details
 
-### olissao1616/test222
+### olissao1616/test2
 
-- URL: https://github.com/olissao1616/test222
+- URL: https://github.com/olissao1616/test2
 - Default branch: main
-- Auto-fix PR: https://github.com/olissao1616/test222/pull/1
+- Auto-fix PR: https://github.com/olissao1616/test2/pull/1
 
 | Branch | Exists | Protected | Strict | Contexts | Approvals | Codeowners required | Linear history | Conversation resolution | Admins enforced | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
