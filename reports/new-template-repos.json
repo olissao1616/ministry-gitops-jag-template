@@ -1,0 +1,14 @@
+{
+  "template": "olissao1616/ministry-gitops-jag-template",
+  "orgs": [
+    "olissao1616"
+  ],
+  "branches": [
+    "main",
+    "test",
+    "develop"
+  ],
+  "newWithinHours": 2,
+  "cutoff": "2026-02-14T20:22:19.844Z",
+  "repos": []
+}
