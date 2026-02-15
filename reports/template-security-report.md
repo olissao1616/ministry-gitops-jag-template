@@ -9,8 +9,8 @@ Max auto-fix PRs per run: 5
 
 ## Summary
 
-- Total repos scanned: 5
-- Template-derived repos: 1
+- Total repos scanned: 6
+- Template-derived repos: 2
 - New window: last 2 hour(s)
 - Template-derived repos created in window: 1
 - Note: Detailed checks are only performed for template-derived repos (REPORT_MODE=template-only)
@@ -19,17 +19,30 @@ Max auto-fix PRs per run: 5
 
 | Repo | Created | Default branch |
 | --- | --- | --- |
-| [olissao1616/test](https://github.com/olissao1616/test) | 2026-02-15T01:52:03Z | main |
+| [olissao1616/test222](https://github.com/olissao1616/test222) | 2026-02-15T05:16:45Z | main |
 
 ## Repositories (template-derived)
 
 | Repo | Created | CODEOWNERS | Dependabot | SECURITY.md | Vuln alerts | Secret scan | Push protect | Actions pinned | main | test | develop | Auto-fix PR | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| [olissao1616/test222](https://github.com/olissao1616/test222) | 2026-02-15T05:16:45Z | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | 0% | ❌ | ❌ | ❌ | [PR](https://github.com/olissao1616/test222/pull/1) | Unpinned actions; Auto-fix pending merge (CODEOWNERS, dependabot.yml) |
 | [olissao1616/test](https://github.com/olissao1616/test) | 2026-02-15T01:52:03Z | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | 0% | ✅ | ✅ | ✅ | [PR](https://github.com/olissao1616/test/pull/1) | Unpinned actions; Auto-fix pending merge (CODEOWNERS, dependabot.yml) |
 
 Legend: ✅ compliant/present, ❌ missing/non-compliant, — branch missing, ⚠ unknown (permissions/API)
 
 ## Branch protection details
+
+### olissao1616/test222
+
+- URL: https://github.com/olissao1616/test222
+- Default branch: main
+- Auto-fix PR: https://github.com/olissao1616/test222/pull/1
+
+| Branch | Exists | Protected | Strict | Contexts | Approvals | Codeowners required | Linear history | Conversation resolution | Admins enforced | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| main | Yes | ❌ | — | — | — | — | — | — | — | Not protected |
+| test | Yes | ❌ | — | — | — | — | — | — | — | Not protected |
+| develop | Yes | ❌ | — | — | — | — | — | — | — | Not protected |
 
 ### olissao1616/test
 
