@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-09T16:14:35.749Z",
+  "generatedAt": "2026-03-09T17:13:06.514Z",
   "template": "olissao1616/ministry-gitops-jag-template",
   "owners": [
     "olissao1616"
@@ -72,7 +72,7 @@
         "security": {
           "status": "reported",
           "securityPolicy": "missing",
-          "vulnerabilityAlerts": false,
+          "vulnerabilityAlerts": null,
           "automatedSecurityFixes": true,
           "securityAndAnalysis": {
             "status": "reported",
