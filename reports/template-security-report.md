@@ -23,7 +23,7 @@ Max auto-fix PRs per run: 5
 
 | Repo | Created | CODEOWNERS | Dependabot | SECURITY.md | Vuln alerts | Secret scan | Push protect | Actions pinned | main | test | develop | Auto-fix PR | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [olissao1616/test](https://github.com/olissao1616/test) | 2026-02-15T07:26:22Z | ❌ | ❌ | ❌ | ⚠ | ✅ | ✅ | 0% | ✅ | ✅ | ✅ | [PR](https://github.com/olissao1616/test/pull/1) | Unpinned actions; Auto-fix pending merge (CODEOWNERS, dependabot.yml) |
+| [olissao1616/test](https://github.com/olissao1616/test) | 2026-02-15T07:26:22Z | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | 0% | ✅ | ✅ | ✅ | [PR](https://github.com/olissao1616/test/pull/1) | Unpinned actions; Auto-fix pending merge (CODEOWNERS, dependabot.yml) |
 
 Legend: ✅ compliant/present, ❌ missing/non-compliant, — branch missing, ⚠ unknown (permissions/API)
 
